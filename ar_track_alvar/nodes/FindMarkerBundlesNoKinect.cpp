@@ -61,7 +61,7 @@ ar_track_alvar_msgs::AlvarMarkers arPoseMarkers_;
 tf::TransformListener *tf_listener;
 tf::TransformBroadcaster *tf_broadcaster;
 MarkerDetector<MarkerData> marker_detector;
-MultiMarkerBundle **multi_marker_bundles=NULL;
+MultiMarkerBundle **multi_marker_bundles=nullptr;
 Pose *bundlePoses;
 int *master_id;
 bool *bundles_seen;
@@ -83,7 +83,7 @@ int n_bundles = 0;
 
 void GetMultiMarkerPoses(IplImage *image);
 void getCapCallback (const sensor_msgs::ImageConstPtr & image_msg);
-void makeMarkerMsgs(int type, int id, Pose &p, sensor_msgs::ImageConstPtr image_msg, tf::StampedTransform &CamToOutput, visualization_msgs::Marker *rvizMarker, ar_track_alvar_msgs::AlvarMarker *ar_pose_marker);
+void makeMarkerMsgs(int type, int id, Pose &p, const sensor_msgs::ImageConstPtr& image_msg, tf::StampedTransform &CamToOutput, visualization_msgs::Marker *rvizMarker, ar_track_alvar_msgs::AlvarMarker *ar_pose_marker);
 
 
 // Updates the bundlePoses of the multi_marker_bundles by detecting markers and using all markers in a bundle to infer the master tag's position
@@ -104,7 +104,7 @@ void GetMultiMarkerPoses(IplImage *image) {
 
 
 // Given the pose of a marker, builds the appropriate ROS messages for later publishing
-void makeMarkerMsgs(int type, int id, Pose &p, sensor_msgs::ImageConstPtr image_msg, tf::StampedTransform &CamToOutput, visualization_msgs::Marker *rvizMarker, ar_track_alvar_msgs::AlvarMarker *ar_pose_marker){
+void makeMarkerMsgs(int type, int id, Pose &p, const sensor_msgs::ImageConstPtr& image_msg, tf::StampedTransform &CamToOutput, visualization_msgs::Marker *rvizMarker, ar_track_alvar_msgs::AlvarMarker *ar_pose_marker){
   double px,py,pz,qx,qy,qz,qw;
 
   px = p.translation[0]/100.0;
@@ -182,11 +182,9 @@ void makeMarkerMsgs(int type, int id, Pose &p, sensor_msgs::ImageConstPtr image_
     out << id;
     std::string id_string = out.str();
     markerFrame += id_string;
-    tf::StampedTransform outputToMarker (tagPoseOutput, image_msg->header.stamp, output_frame, markerFrame.c_str());
+    tf::StampedTransform outputToMarker (tagPoseOutput, image_msg->header.stamp, output_frame, markerFrame);
     tf_broadcaster->sendTransform(outputToMarker);
   }
-  else
-    ar_pose_marker = NULL;
 }
 
 
@@ -202,7 +200,7 @@ void getCapCallback (const sensor_msgs::ImageConstPtr & image_msg)
 	tf_listener->waitForTransform(output_frame, image_msg->header.frame_id, image_msg->header.stamp, ros::Duration(1.0));
 	tf_listener->lookupTransform(output_frame, image_msg->header.frame_id, image_msg->header.stamp, CamToOutput);
       }
-      catch (tf::TransformException ex){
+      catch (const tf::TransformException &ex){
 	ROS_ERROR("%s",ex.what());
       }
 
@@ -226,16 +224,16 @@ void getCapCallback (const sensor_msgs::ImageConstPtr & image_msg)
       for(int i=0; i<n_bundles; i++)
 	bundles_seen[i] = false;
 
-      for (size_t i=0; i<marker_detector.markers->size(); i++)
+      for (auto & marker : *marker_detector.markers)
 	{
-	  int id = (*(marker_detector.markers))[i].GetId();
+	  int id = static_cast<int>(marker.GetId());
 
 	  // Draw if id is valid
 	  if(id >= 0){
 
 	    //Mark the bundle that marker belongs to as "seen"
 	    for(int j=0; j<n_bundles; j++){
-	      for(int k=0; k<bundle_indices[j].size(); k++){
+	      for(size_t k=0; k < bundle_indices[j].size(); k++){
 		if(bundle_indices[j][k] == id){
 		  bundles_seen[j] = true;
 		  break;
@@ -249,7 +247,7 @@ void getCapCallback (const sensor_msgs::ImageConstPtr & image_msg)
 	      if(id == master_id[i]) should_draw = false;
 	    }
 	    if(should_draw){
-	      Pose p = (*(marker_detector.markers))[i].pose;
+	      Pose p = marker.pose;
 	      makeMarkerMsgs(VISIBLE_MARKER, id, p, image_msg, CamToOutput, &rvizMarker, &ar_pose_marker);
 	      rvizMarkerPub_.publish (rvizMarker);
 	    }
@@ -259,7 +257,7 @@ void getCapCallback (const sensor_msgs::ImageConstPtr & image_msg)
       //Draw the main markers, whether they are visible or not -- but only if at least 1 marker from their bundle is currently seen
       for(int i=0; i<n_bundles; i++)
 	{
-	  if(bundles_seen[i] == true){
+	  if(bundles_seen[i]){
 	    makeMarkerMsgs(MAIN_MARKER, master_id[i], bundlePoses[i], image_msg, CamToOutput, &rvizMarker, &ar_pose_marker);
 	    rvizMarkerPub_.publish (rvizMarker);
 	    arPoseMarkers_.markers.push_back (ar_pose_marker);
@@ -277,6 +275,7 @@ void getCapCallback (const sensor_msgs::ImageConstPtr & image_msg)
 
 void configCallback(ar_track_alvar::ParamsConfig &config, uint32_t level)
 {
+  (void)level;
   ROS_INFO("AR tracker reconfigured: %s %.2f %.2f %.2f %.2f", config.enabled ? "ENABLED" : "DISABLED",
            config.max_frequency, config.marker_size, config.max_new_marker_error, config.max_track_error);
 
@@ -324,7 +323,7 @@ int main(int argc, char *argv[])
     int n_args_before_list = 7;
     n_bundles = argc - n_args_before_list;
     for (int i = 0; i < n_bundles; ++i) {
-      bundle_files.push_back(string(argv[i + n_args_before_list]));
+      bundle_files.emplace_back(argv[i + n_args_before_list]);
     }
 
   } else {
