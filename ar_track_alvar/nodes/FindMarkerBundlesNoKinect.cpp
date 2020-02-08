@@ -30,7 +30,6 @@
 */
 
 
-#include "ar_track_alvar/CvTestbed.h"
 #include "ar_track_alvar/MarkerDetector.h"
 #include "ar_track_alvar/MultiMarkerBundle.h"
 #include "ar_track_alvar/MultiMarkerInitializer.h"
@@ -333,7 +332,6 @@ int main(int argc, char *argv[])
     pn.param("max_new_marker_error", max_new_marker_error, 0.08);
     pn.param("max_track_error", max_track_error, 0.2);
     pn.param("max_frequency", max_frequency, 8.0);
-    pn.setParam("max_frequency", max_frequency);  // in case it was not set.
     pn.param("marker_resolution", marker_resolution, 5);
     pn.param("marker_margin", marker_margin, 2);
     pn.param<std::string>("bundle_files", bundle_string, "");
@@ -358,6 +356,7 @@ int main(int argc, char *argv[])
   }
 
   // Set dynamically configurable parameters so they don't get replaced by default values
+  pn.setParam("max_frequency", max_frequency);
   pn.setParam("marker_size", marker_size);
   pn.setParam("max_new_marker_error", max_new_marker_error);
   pn.setParam("max_track_error", max_track_error);
