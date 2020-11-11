@@ -54,7 +54,7 @@ protected:
   // mostly ignored
 public:
   double translation[4];
-  CvMat translation_mat;
+  cv::Mat translation_mat;
 
   /** \e Output for debugging purposes */
   void Output() const;
@@ -65,11 +65,11 @@ public:
    *  \param rot Handled using the \e Rotation class
    *  \param t   Handled using the \e Rotation class
    */
-  Pose(CvMat* tra, CvMat* rot, RotationType t);
+  Pose(const cv::Mat& tra, const cv::Mat& rot, RotationType t);
   /** \e Constructor with 3x3, 3x4 or 4x4 matrix representation
    *  \param mat A 3x3 rotation matrix or 3x4 / 4x4 transformation matrix
    */
-  Pose(CvMat* mat);
+  Pose(const cv::Mat& mat);
   /** \e Copy constructor */
   Pose(const Pose& p);
   /** \e Reset the pose */
@@ -77,7 +77,7 @@ public:
   /** Set the transformation from the given matrix \e mat
    *  \param mat A 3x3 rotation matrix or 3x4 / 4x4 transformation matrix
    */
-  void SetMatrix(const CvMat* mat);
+  void SetMatrix(const cv::Mat& mat);
   /** \brief Set the \e Pose using OpenGL's transposed format.
    *  Note, that by default this also mirrors both the y- and z-axis (see \e
    * Camera and \e Pose for more information) \param gl OpenGL 4x4
@@ -87,7 +87,7 @@ public:
   /** Get the transformation into the given matrix \e mat
    *  \param mat A 3x3 rotation matrix or 3x4 / 4x4 transformation matrix
    */
-  void GetMatrix(CvMat* mat) const;
+  void GetMatrix(cv::Mat& mat) const;
   /** \brief Get the transformation matrix representation of the \e Pose using
    * OpenGL's transposed format. Note, that by default this also mirrors both
    * the y- and z-axis (see \e Camera and \e Pose for more information) \param
@@ -107,7 +107,7 @@ public:
   /** Set the translation part for the \e Pose
    *  \param tra Column vector containing three translation elements
    */
-  void SetTranslation(const CvMat* tra);
+  void SetTranslation(const cv::Mat& tra);
   /** Set the translation part for the \e Pose
    *  \param tra Array containing three translation elements
    */
@@ -118,7 +118,7 @@ public:
    *  \param tra Column vector where the three translation elements are filled
    * in
    */
-  void GetTranslation(CvMat* tra) const;
+  void GetTranslation(cv::Mat& tra) const;
   /** Assignment operator for copying \e Pose class */
   Pose& operator=(const Pose& p);
 };

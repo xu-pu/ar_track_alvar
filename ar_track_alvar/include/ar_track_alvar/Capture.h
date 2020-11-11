@@ -128,7 +128,7 @@ public:
    *
    * \return The captured image.
    */
-  virtual IplImage* captureImage() = 0;
+  virtual cv::Mat& captureImage() = 0;
 
   /**
    * \brief Save camera settings to a file.

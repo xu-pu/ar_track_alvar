@@ -1,11 +1,11 @@
 #include "ar_track_alvar/MultiMarker.h"
-#include "highgui.h"
+#include <opencv2/highgui.hpp>
 using namespace std;
 using namespace alvar;
 
 struct State
 {
-  IplImage* img;
+  cv::Mat img;
   stringstream filename;
   double minx, miny, maxx, maxy;  // top-left and bottom-right in pixel units
   MultiMarker multi_marker;
@@ -25,8 +25,7 @@ struct State
   bool marker_data_force_strong_hamming;
 
   State()
-    : img(0)
-    , prompt(false)
+    : prompt(false)
     , units(96.0 / 2.54)
     ,  // cm assuming 96 dpi
     marker_side_len(9.0)
@@ -44,8 +43,7 @@ struct State
   }
   ~State()
   {
-    if (img)
-      cvReleaseImage(&img);
+    img.release();
   }
   void AddMarker(const char* id)
   {
@@ -54,9 +52,9 @@ struct State
     {
       MarkerData md(marker_side_len, content_res, margin_res);
       int side_len = int(marker_side_len * units + 0.5);
-      if (img == 0)
+      if (img.empty())
       {
-        img = cvCreateImage(cvSize(side_len, side_len), IPL_DEPTH_8U, 1);
+        img = cv::Mat(cv::Size(side_len, side_len), CV_8UC1);
         filename.str("");
         filename << "MarkerData";
         minx = (posx * units) - (marker_side_len * units / 2.0);
@@ -78,25 +76,23 @@ struct State
           new_maxx = maxx;
         if (maxy > new_maxy)
           new_maxy = maxy;
-        IplImage* new_img =
-            cvCreateImage(cvSize(int(new_maxx - new_minx + 0.5),
-                                 int(new_maxy - new_miny + 0.5)),
-                          IPL_DEPTH_8U, 1);
-        cvSet(new_img, cvScalar(255));
-        CvRect roi =
-            cvRect(int(minx - new_minx + 0.5), int(miny - new_miny + 0.5),
-                   img->width, img->height);
-        cvSetImageROI(new_img, roi);
-        cvCopy(img, new_img);
-        cvReleaseImage(&img);
+        cv::Mat new_img = cv::Mat(cv::Size(int(new_maxx - new_minx + 0.5),
+                                           int(new_maxy - new_miny + 0.5)),
+                                  CV_8UC1, cv::Scalar(255));
+        img.copyTo(
+            new_img(cv::Rect(int(minx - new_minx + 0.5),
+                             int(miny - new_miny + 0.5), img.cols, img.rows)));
+        img.release();
         img = new_img;
-        roi.x = int((posx * units) - (marker_side_len * units / 2.0) -
-                    new_minx + 0.5);
-        roi.y = int((posy * units) - (marker_side_len * units / 2.0) -
-                    new_miny + 0.5);
-        roi.width = int(marker_side_len * units + 0.5);
-        roi.height = int(marker_side_len * units + 0.5);
-        cvSetImageROI(img, roi);
+        int roi_x = int((posx * units) - (marker_side_len * units / 2.0) -
+                        new_minx + 0.5);
+        int roi_y = int((posy * units) - (marker_side_len * units / 2.0) -
+                        new_miny + 0.5);
+        int roi_t = -roi_y;
+        int roi_b = -img.rows + int(marker_side_len * units + 0.5) + roi_y;
+        int roi_l = -roi_x;
+        int roi_r = -img.cols + int(marker_side_len * units + 0.5) + roi_x;
+        img.adjustROI(roi_t, roi_b, roi_l, roi_r);
         minx = new_minx;
         miny = new_miny;
         maxx = new_maxx;
@@ -133,7 +129,12 @@ struct State
         }
       }
       md.ScaleMarkerToImage(img);
-      cvResetImageROI(img);
+      // reset ROI
+      cv::Size roi_size;
+      cv::Point roi_offset;
+      img.locateROI(roi_size, roi_offset);
+      img.adjustROI(roi_offset.y, roi_size.height - img.rows, roi_offset.x,
+                    roi_size.width - img.cols);
     }
     else if (marker_type == 1)
     {
@@ -141,9 +142,9 @@ struct State
       // multi markers)
       MarkerArtoolkit md(marker_side_len, content_res, margin_res);
       int side_len = int(marker_side_len * units + 0.5);
-      if (img != 0)
-        cvReleaseImage(&img);
-      img = cvCreateImage(cvSize(side_len, side_len), IPL_DEPTH_8U, 1);
+      if (!img.empty())
+        img.release();
+      img = cv::Mat(cv::Size(side_len, side_len), CV_8UC1);
       filename.str("");
       filename << "MarkerArtoolkit";
       md.SetContent(atoi(id));
@@ -153,13 +154,13 @@ struct State
   }
   void Save()
   {
-    if (img)
+    if (!img.empty())
     {
       std::stringstream filenamexml;
       filenamexml << filename.str() << ".xml";
       filename << ".png";
       std::cout << "Saving: " << filename.str() << std::endl;
-      cvSaveImage(filename.str().c_str(), img);
+      cv::imwrite(filename.str(), img);
       if (multi_marker.Size() > 1)
       {
         std::cout << "Saving: " << filenamexml.str() << std::endl;

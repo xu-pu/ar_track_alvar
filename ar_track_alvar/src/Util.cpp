@@ -23,6 +23,7 @@
 
 #include "ar_track_alvar/Util.h"
 #include "ar_track_alvar/FileFormatUtils.h"
+#include <opencv2/opencv.hpp>
 
 using namespace std;
 
@@ -32,36 +33,37 @@ using namespace std;
 
 // ttesis
 
-int dot(CvPoint* A, CvPoint* B, CvPoint* C)
+int dot(const cv::Point& A, const cv::Point& B, const cv::Point& C)
 {
-  CvPoint AB, BC;
-  AB.x = B->x - A->x;
-  AB.y = B->y - A->y;
-  BC.x = C->x - B->x;
-  BC.y = C->y - B->y;
+  cv::Point AB, BC;
+  AB.x = B.x - A.x;
+  AB.y = B.y - A.y;
+  BC.x = C.x - B.x;
+  BC.y = C.y - B.y;
   int dot = AB.x * BC.x + AB.y * BC.y;
   return dot;
 }
 
-int cross(CvPoint* A, CvPoint* B, CvPoint* C)
+int cross(const cv::Point& A, const cv::Point& B, const cv::Point& C)
 {
-  CvPoint AB, AC;
-  AB.x = B->x - A->x;
-  AB.y = B->y - A->y;
-  AC.x = C->x - A->x;
-  AC.y = C->y - A->y;
+  cv::Point AB, AC;
+  AB.x = B.x - A.x;
+  AB.y = B.y - A.y;
+  AC.x = C.x - A.x;
+  AC.y = C.y - A.y;
   int cross = AB.x * AC.y - AB.y * AC.x;
   return cross;
 }
 
-double distance(CvPoint* A, CvPoint* B)
+double distance(const cv::Point& A, const cv::Point& B)
 {
-  double d1 = A->x - B->x;
-  double d2 = A->y - B->y;
+  double d1 = A.x - B.x;
+  double d2 = A.y - B.y;
   return sqrt(d1 * d1 + d2 * d2);
 }
 
-double linePointDist(CvPoint* A, CvPoint* B, CvPoint* C, bool isSegment)
+double linePointDist(const cv::Point& A, const cv::Point& B, const cv::Point& C,
+                     bool isSegment)
 {
   double dist = cross(A, B, C) / distance(A, B);
   if (isSegment)
@@ -76,14 +78,14 @@ double linePointDist(CvPoint* A, CvPoint* B, CvPoint* C, bool isSegment)
   return abs(dist);
 }
 
-double angle(CvPoint* A, CvPoint* B, CvPoint* C, CvPoint* D,
-             int isDirectionDependent)
+double angle(const cv::Point& A, const cv::Point& B, const cv::Point& C,
+             const cv::Point& D, int isDirectionDependent)
 {
   double angle;
-  double a = B->x - A->x;
-  double b = B->y - A->y;
-  double c = D->x - C->x;
-  double d = D->y - C->y;
+  double a = B.x - A.x;
+  double b = B.y - A.y;
+  double c = D.x - C.x;
+  double d = D.y - C.y;
   angle =
       acos(((a * c) + (b * d)) / (sqrt(a * a + b * b) * sqrt(c * c + d * d)));
   if (isDirectionDependent)
@@ -101,8 +103,8 @@ double angle(CvPoint* A, CvPoint* B, CvPoint* C, CvPoint* D,
   }
 }
 
-double polyLinePointDist(CvPoint* PointList, int nPnts, CvPoint* C, int* index,
-                         int isClosedPolygon)
+double polyLinePointDist(const std::vector<cv::Point>& points,
+                         const cv::Point& C, int* index, int isClosedPolygon)
 {
   //	Calculate minimum distance of Point C to Polygon whose points are in list
   // PointList 	if isClosedPolygon is true polygon is closed (segnment of the
@@ -111,9 +113,9 @@ double polyLinePointDist(CvPoint* PointList, int nPnts, CvPoint* C, int* index,
   *index = -1;
   double mindist = -1;
   double dist;
-  for (int i = 0; i < nPnts - 1; i++)
+  for (int i = 0; i < points.size() - 1; i++)
   {
-    dist = linePointDist(&PointList[i], &PointList[i + 1], C, 1);
+    dist = linePointDist(points[i], points[i + 1], C, 1);
     if (mindist == -1 || dist < mindist)
     {
       mindist = dist;
@@ -122,11 +124,11 @@ double polyLinePointDist(CvPoint* PointList, int nPnts, CvPoint* C, int* index,
   }
   if (isClosedPolygon)
   {
-    dist = linePointDist(&PointList[nPnts - 1], &PointList[0], C, 1);
+    dist = linePointDist(points[points.size() - 1], points[0], C, 1);
     if (dist < mindist)
     {
       mindist = dist;
-      *index = nPnts - 1;
+      *index = points.size() - 1;
     }
   }
   return mindist;
@@ -134,18 +136,19 @@ double polyLinePointDist(CvPoint* PointList, int nPnts, CvPoint* C, int* index,
 
 // ttesis
 
-void FitCVEllipse(const vector<PointDouble>& points, CvBox2D& ellipse_box)
+void FitCVEllipse(const vector<PointDouble>& points,
+                  cv::RotatedRect& ellipse_box)
 {
   if (points.size() < 8)
     return;
 
-  CvMat* vector = cvCreateMat(1, int(points.size()), CV_64FC2);
+  cv::Mat vector = cv::Mat(1, int(points.size()), CV_64FC2);
   for (size_t i = 0; i < points.size(); ++i)
   {
-    CV_MAT_ELEM(*vector, CvPoint2D64f, 0, i) = (CvPoint2D64f)points[i];
+    vector.at<cv::Vec2d>(0, i) = cv::Vec2d(points[i].x, points[i].y);
   }
-  ellipse_box = cvFitEllipse2(vector);
-  cvReleaseMat(&vector);
+  ellipse_box = cv::fitEllipse(vector);
+  vector.release();
 }
 
 int exp_filt2(vector<double>& v, vector<double>& ret, bool clamp)
@@ -234,34 +237,34 @@ int find_zero_crossings(const vector<double>& v, vector<int>& corners, int offs)
   return int(corners.size());
 }
 
-void out_matrix(const CvMat* m, const char* name)
+void out_matrix(const cv::Mat& m, const char* name)
 {
-  if (m->cols == 1)
+  if (m.cols == 1)
   {
     std::cout << name << " = [";
-    for (int j = 0; j < m->rows; j++)
+    for (int j = 0; j < m.rows; j++)
     {
-      std::cout << " " << cvGet2D(m, j, 0).val[0];
+      std::cout << " " << m.at<double>(j, 0);
     }
     std::cout << "]^T" << std::endl;
   }
-  else if (m->rows == 1)
+  else if (m.rows == 1)
   {
     std::cout << name << " = [";
-    for (int i = 0; i < m->cols; i++)
+    for (int i = 0; i < m.cols; i++)
     {
-      std::cout << " " << cvGet2D(m, 0, i).val[0];
+      std::cout << " " << m.at<double>(0, i);
     }
     std::cout << "]^T" << std::endl;
   }
   else
   {
     std::cout << name << " = [" << std::endl;
-    for (int j = 0; j < m->rows; j++)
+    for (int j = 0; j < m.rows; j++)
     {
-      for (int i = 0; i < m->cols; i++)
+      for (int i = 0; i < m.cols; i++)
       {
-        std::cout << " " << cvGet2D(m, j, i).val[0];
+        std::cout << " " << m.at<double>(j, i);
       }
       std::cout << std::endl;
     }
@@ -620,7 +623,7 @@ bool Serialization::Serialize(std::string& data, const std::string& name)
   return ret;
 }
 
-bool Serialization::Serialize(CvMat& data, const std::string& name)
+bool Serialization::Serialize(cv::Mat& data, const std::string& name)
 {
   SerializationFormatterXml* xml = (SerializationFormatterXml*)formatter_handle;
   bool ret = true;
@@ -630,13 +633,13 @@ bool Serialization::Serialize(CvMat& data, const std::string& name)
         (TiXmlElement*)xml->xml_current->FirstChild(name);
     if (xml_matrix == NULL)
       return false;
-    if (!FileFormatUtils::parseXMLMatrix(xml_matrix, &data))
+    if (!FileFormatUtils::parseXMLMatrix(xml_matrix, data))
       return false;
   }
   else
   {
     xml->xml_current->LinkEndChild(
-        FileFormatUtils::createXMLMatrix(name.c_str(), &data));
+        FileFormatUtils::createXMLMatrix(name.c_str(), data));
   }
   return ret;
 }

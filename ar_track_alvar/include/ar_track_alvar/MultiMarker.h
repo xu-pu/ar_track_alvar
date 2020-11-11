@@ -58,7 +58,7 @@ public:
   // One idea is that the same 'pointcloud' could contain feature
   // points after marker-corner-points. This way they would be
   // optimized simultaneously with marker corners...
-  std::map<int, CvPoint3D64f> pointcloud;
+  std::map<int, cv::Point3d> pointcloud;
   std::vector<int> marker_indices;  // The marker id's to be used in marker
                                     // field (first being the base)
   std::vector<int> marker_status;   // 0: not in point cloud, 1: in point cloud,
@@ -73,10 +73,16 @@ public:
   int get_id_index(int id, bool add_if_missing = false);
 
   double _GetPose(MarkerIterator& begin, MarkerIterator& end, Camera* cam,
-                  Pose& pose, IplImage* image);
+                  Pose& pose, cv::Mat& image);
+  double _GetPose(MarkerIterator& begin, MarkerIterator& end, Camera* cam,
+                  Pose& pose)
+  {
+    cv::Mat empty_img;
+    return _GetPose(begin, end, cam, pose, empty_img);
+  }
 
   int _SetTrackMarkers(MarkerDetectorImpl& marker_detector, Camera* cam,
-                       Pose& pose, IplImage* image);
+                       Pose& pose, cv::Mat& image);
   int master_id;  // The id of the first marker specified in the XML file
 
   /** \brief Resets the multi marker. */
@@ -118,23 +124,40 @@ public:
   */
   template <class M>
   double GetPose(const std::vector<M, Eigen::aligned_allocator<M> >* markers,
-                 Camera* cam, Pose& pose, IplImage* image = 0)
+                 Camera* cam, Pose& pose, cv::Mat& image)
   {
     MarkerIteratorImpl<M> begin(markers->begin());
     MarkerIteratorImpl<M> end(markers->end());
     return _GetPose(begin, end, cam, pose, image);
+  }
+  template <class M>
+  double GetPose(const std::vector<M, Eigen::aligned_allocator<M> >* markers,
+                 Camera* cam, Pose& pose)
+  {
+    MarkerIteratorImpl<M> begin(markers->begin());
+    MarkerIteratorImpl<M> end(markers->end());
+    return _GetPose(begin, end, cam, pose);
   }
 
   /** \brief Calls GetPose to obtain camera pose.
    */
   template <class M>
   double Update(const std::vector<M, Eigen::aligned_allocator<M> >* markers,
-                Camera* cam, Pose& pose, IplImage* image = 0)
+                Camera* cam, Pose& pose, cv::Mat& image)
   {
     if (markers->size() < 1)
       return -1.0;
 
     return GetPose(markers, cam, pose, image);
+  }
+  template <class M>
+  double Update(const std::vector<M, Eigen::aligned_allocator<M> >* markers,
+                Camera* cam, Pose& pose)
+  {
+    if (markers->size() < 1)
+      return -1.0;
+
+    return GetPose(markers, cam, pose);
   }
 
   /** \brief Reserts the 3D point cloud of the markers.
@@ -149,7 +172,7 @@ public:
     \param corners Resulted 3D corner points are stored here.
   */
   void PointCloudCorners3d(double edge_length, Pose& pose,
-                           CvPoint3D64f corners[4]);
+                           cv::Point3d corners[4]);
 
   /** \brief Adds marker corners to 3D point cloud of multi marker.
     \param marker_id Id of the marker to be added.
@@ -207,7 +230,7 @@ public:
    */
   template <class M>
   int SetTrackMarkers(MarkerDetector<M>& marker_detector, Camera* cam,
-                      Pose& pose, IplImage* image = 0)
+                      Pose& pose, cv::Mat& image)
   {
     return _SetTrackMarkers(marker_detector, cam, pose, image);
   }

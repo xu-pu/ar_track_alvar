@@ -15,13 +15,13 @@ CvTestbed::~CvTestbed()
   {
     if (images[i].release_at_exit)
     {
-      cvReleaseImage(&(images[i].ipl));
+      images[i].ipl.release();
     }
   }
   images.clear();
 }
 
-void CvTestbed::default_videocallback(IplImage* image)
+void CvTestbed::default_videocallback(cv::Mat& image)
 {
   // TODO: Skip frames if we are too slow? Impossible using OpenCV?
   /*
@@ -47,13 +47,13 @@ void CvTestbed::WaitKeys()
   {
     if (cap)
     {
-      IplImage* frame = cap->captureImage();
-      if (frame)
+      cv::Mat& frame = cap->captureImage();
+      if (!frame.empty())
       {
         default_videocallback(frame);
         if (wintitle.size() > 0)
         {
-          cvShowImage(wintitle.c_str(), frame);
+          cv::imshow(wintitle, frame);
         }
       }
     }
@@ -62,7 +62,7 @@ void CvTestbed::WaitKeys()
     if ((key = cvWaitKey(1)) >= 0)
     {
 #else
-    if ((key = cvWaitKey(20)) >= 0)
+    if ((key = cv::waitKey(20)) >= 0)
     {
 #endif
       if (keycallback)
@@ -102,7 +102,7 @@ void CvTestbed::ShowVisibleImages()
   {
     if (images[i].visible)
     {
-      cvShowImage(images[i].title.c_str(), images[i].ipl);
+      cv::imshow(images[i].title, images[i].ipl);
     }
   }
 }
@@ -113,7 +113,7 @@ CvTestbed& CvTestbed::Instance()
   return obj;
 }
 
-void CvTestbed::SetVideoCallback(void (*_videocallback)(IplImage* image))
+void CvTestbed::SetVideoCallback(void (*_videocallback)(cv::Mat& image))
 {
   videocallback = _videocallback;
 }
@@ -144,7 +144,7 @@ bool CvTestbed::StartVideo(Capture* _cap, const char* _wintitle)
   if (_wintitle)
   {
     wintitle = _wintitle;
-    cvNamedWindow(_wintitle, 1);
+    cv::namedWindow(_wintitle, 1);
   }
   WaitKeys();  // Call the main loop
   if (clean)
@@ -155,7 +155,7 @@ bool CvTestbed::StartVideo(Capture* _cap, const char* _wintitle)
   return true;
 }
 
-size_t CvTestbed::SetImage(const char* title, IplImage* ipl,
+size_t CvTestbed::SetImage(const char* title, const cv::Mat& ipl,
                            bool release_at_exit /* =false */)
 {
   size_t index = GetImageIndex(title);
@@ -169,46 +169,41 @@ size_t CvTestbed::SetImage(const char* title, IplImage* ipl,
   // If the title was found replace the image
   if (images[index].release_at_exit)
   {
-    cvReleaseImage(&(images[index].ipl));
+    images[index].ipl.release();
   }
   images[index].ipl = ipl;
   images[index].release_at_exit = release_at_exit;
   return index;
 }
 
-IplImage* CvTestbed::CreateImage(const char* title, CvSize size, int depth,
-                                 int channels)
+cv::Mat CvTestbed::CreateImage(const char* title, cv::Size size, int depth,
+                               int channels)
 {
-  IplImage* ipl = cvCreateImage(size, depth, channels);
-  if (!ipl)
-    return NULL;
+  cv::Mat ipl = cv::Mat(size, CV_MAKETYPE(depth, channels));
   SetImage(title, ipl, true);
   return ipl;
 }
 
-IplImage* CvTestbed::CreateImageWithProto(const char* title, IplImage* proto,
-                                          int depth /* =0 */,
-                                          int channels /* =0 */)
+cv::Mat CvTestbed::CreateImageWithProto(const char* title, cv::Mat& proto,
+                                        int depth /* =0 */,
+                                        int channels /* =0 */)
 {
   if (depth == 0)
-    depth = proto->depth;
+    depth = proto.depth();
   if (channels == 0)
-    channels = proto->nChannels;
-  IplImage* ipl =
-      cvCreateImage(cvSize(proto->width, proto->height), depth, channels);
-  if (!ipl)
-    return NULL;
-  ipl->origin = proto->origin;
+    channels = proto.channels();
+  cv::Mat ipl =
+      cv::Mat(cv::Size(proto.cols, proto.rows), CV_MAKETYPE(depth, channels));
   SetImage(title, ipl, true);
   return ipl;
 }
 
-IplImage* CvTestbed::GetImage(size_t index)
+cv::Mat CvTestbed::GetImage(size_t index)
 {
   if (index < 0)
-    return NULL;
+    return cv::Mat();
   if (index >= images.size())
-    return NULL;
+    return cv::Mat();
   return images[index].ipl;
 }
 
@@ -225,7 +220,7 @@ size_t CvTestbed::GetImageIndex(const char* title)
   return (size_t)-1;
 }
 
-IplImage* CvTestbed::GetImage(const char* title)
+cv::Mat CvTestbed::GetImage(const char* title)
 {
   return GetImage(GetImageIndex(title));
 }
@@ -237,13 +232,13 @@ bool CvTestbed::ToggleImageVisible(size_t index, int flags)
   if (images[index].visible == false)
   {
     images[index].visible = true;
-    cvNamedWindow(images[index].title.c_str(), flags);
+    cv::namedWindow(images[index].title, flags);
     return true;
   }
   else
   {
     images[index].visible = false;
-    cvDestroyWindow(images[index].title.c_str());
+    cv::destroyWindow(images[index].title);
     return false;
   }
 }

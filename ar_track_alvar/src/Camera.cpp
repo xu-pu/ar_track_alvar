@@ -25,6 +25,7 @@
 #include "ar_track_alvar/Camera.h"
 #include "ar_track_alvar/FileFormatUtils.h"
 #include <memory>
+#include <opencv2/opencv.hpp>
 
 using namespace std;
 
@@ -40,37 +41,38 @@ void ProjPoints::Reset()
 }
 
 // TODO: Does it matter what the etalon_square_size is???
-bool ProjPoints::AddPointsUsingChessboard(IplImage* image,
+bool ProjPoints::AddPointsUsingChessboard(const cv::Mat& image,
                                           double etalon_square_size,
                                           int etalon_rows, int etalon_columns,
                                           bool visualize)
 {
-  if (image->width == 0)
+  if (image.cols == 0)
     return false;
-  IplImage* gray =
-      cvCreateImage(cvSize(image->width, image->height), IPL_DEPTH_8U, 1);
-  CvPoint2D32f* corners = new CvPoint2D32f[etalon_rows * etalon_columns];
-  if (image->nChannels == 1)
-    cvCopy(image, gray);
+  cv::Mat gray = cv::Mat(image.rows, image.cols, CV_8UC1);
+  std::vector<cv::Point2f> corners;
+  if (image.channels() == 1)
+    image.copyTo(gray);
   else
-    cvCvtColor(image, gray, CV_RGB2GRAY);
-  width = image->width;
-  height = image->height;
+    cv::cvtColor(image, gray, cv::COLOR_RGB2GRAY);
 
-  int point_count = 0;
-  int pattern_was_found = cvFindChessboardCorners(
-      gray, cvSize(etalon_rows, etalon_columns), corners, &point_count);
-  if (!pattern_was_found)
-    point_count = 0;
+  width = image.cols;
+  height = image.rows;
+
+  std::size_t point_count = 0;
+
+  int pattern_was_found = cv::findChessboardCorners(
+      gray, cv::Size(etalon_rows, etalon_columns), corners);
+  point_count = !pattern_was_found ? 0 : corners.size();
   if (point_count > 0)
   {
-    cvFindCornerSubPix(
-        gray, corners, point_count, cvSize(5, 5), cvSize(-1, -1),
-        cvTermCriteria(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 10, 0.01f));
+    cv::cornerSubPix(
+        gray, corners, cv::Size(5, 5), cv::Size(-1, -1),
+        cv::TermCriteria(cv::TermCriteria::MAX_ITER | cv::TermCriteria::EPS, 10,
+                         0.01f));
     for (int i = 0; i < point_count; i++)
     {
-      CvPoint3D64f po;
-      CvPoint2D64f pi;
+      cv::Point3d po;
+      cv::Point2d pi;
       po.x = etalon_square_size * (i % etalon_rows);
       po.y = etalon_square_size * (i / etalon_rows);
       po.z = 0;
@@ -83,11 +85,11 @@ bool ProjPoints::AddPointsUsingChessboard(IplImage* image,
   }
   if (visualize)
   {
-    cvDrawChessboardCorners(image, cvSize(etalon_rows, etalon_columns), corners,
-                            point_count, false /*pattern_was_found*/);
+    cv::drawChessboardCorners(image, cv::Size(etalon_rows, etalon_columns),
+                              corners, false);
   }
-  delete[] corners;
-  cvReleaseImage(&gray);
+  corners.clear();
+  gray.release();
   if (point_count > 0)
     return true;
   return false;
@@ -95,17 +97,17 @@ bool ProjPoints::AddPointsUsingChessboard(IplImage* image,
 
 bool ProjPoints::AddPointsUsingMarkers(vector<PointDouble>& marker_corners,
                                        vector<PointDouble>& marker_corners_img,
-                                       IplImage* image)
+                                       cv::Mat& image)
 {
-  width = image->width;
-  height = image->height;
+  width = image.cols;
+  height = image.rows;
   if ((marker_corners.size() == marker_corners_img.size()) &&
       (marker_corners.size() == 4))
   {
     for (size_t p = 0; p < marker_corners.size(); p++)
     {
-      CvPoint3D64f po;
-      CvPoint2D64f pi;
+      cv::Point3d po;
+      cv::Point2d pi;
       po.x = marker_corners[p].x;
       po.y = marker_corners[p].y;
       po.z = 0;
@@ -122,8 +124,8 @@ bool ProjPoints::AddPointsUsingMarkers(vector<PointDouble>& marker_corners,
 
 Camera::Camera()
 {
-  calib_K = cvMat(3, 3, CV_64F, calib_K_data);
-  calib_D = cvMat(4, 1, CV_64F, calib_D_data);
+  calib_K = cv::Mat(3, 3, CV_64F, calib_K_data);
+  calib_D = cv::Mat(4, 1, CV_64F, calib_D_data);
   memset(calib_K_data, 0, sizeof(double) * 3 * 3);
   memset(calib_D_data, 0, sizeof(double) * 4);
   calib_K_data[0][0] = 550;  // Just some focal length by default
@@ -139,8 +141,8 @@ Camera::Camera()
 
 Camera::Camera(ros::NodeHandle& n, std::string cam_info_topic) : n_(n)
 {
-  calib_K = cvMat(3, 3, CV_64F, calib_K_data);
-  calib_D = cvMat(4, 1, CV_64F, calib_D_data);
+  calib_K = cv::Mat(3, 3, CV_64F, calib_K_data);
+  calib_D = cv::Mat(4, 1, CV_64F, calib_D_data);
   memset(calib_K_data, 0, sizeof(double) * 3 * 3);
   memset(calib_D_data, 0, sizeof(double) * 4);
   calib_K_data[0][0] = 550;  // Just some focal length by default
@@ -199,54 +201,50 @@ bool Camera::LoadCalibXML(const char* calibfile)
          xml_root->QueryIntAttribute("height", &calib_y_res) == TIXML_SUCCESS &&
          FileFormatUtils::parseXMLMatrix(xml_root->FirstChildElement("intrinsic"
                                                                      "_matrix"),
-                                         &calib_K) &&
+                                         calib_K) &&
          FileFormatUtils::parseXMLMatrix(xml_root->FirstChildElement("distortio"
                                                                      "n"),
-                                         &calib_D);
+                                         calib_D);
 }
 
 bool Camera::LoadCalibOpenCV(const char* calibfile)
 {
-  cvSetErrMode(CV_ErrModeSilent);
-  CvFileStorage* fs = cvOpenFileStorage(calibfile, 0, CV_STORAGE_READ);
-  cvSetErrMode(CV_ErrModeLeaf);
-  if (fs)
+  cv::FileStorage fs;
+  bool success = fs.open(calibfile, cv::FileStorage::READ);
+
+  if (success)
   {
-    CvFileNode* root_node = cvGetRootFileNode(fs);
     // K Intrinsic
-    CvFileNode* intrinsic_mat_node =
-        cvGetFileNodeByName(fs, root_node, "intrinsic_matrix");
-    CvMat* intrinsic_mat =
-        reinterpret_cast<CvMat*>(cvRead(fs, intrinsic_mat_node));
-    cvmSet(&calib_K, 0, 0, cvmGet(intrinsic_mat, 0, 0));
-    cvmSet(&calib_K, 0, 1, cvmGet(intrinsic_mat, 0, 1));
-    cvmSet(&calib_K, 0, 2, cvmGet(intrinsic_mat, 0, 2));
-    cvmSet(&calib_K, 1, 0, cvmGet(intrinsic_mat, 1, 0));
-    cvmSet(&calib_K, 1, 1, cvmGet(intrinsic_mat, 1, 1));
-    cvmSet(&calib_K, 1, 2, cvmGet(intrinsic_mat, 1, 2));
-    cvmSet(&calib_K, 2, 0, cvmGet(intrinsic_mat, 2, 0));
-    cvmSet(&calib_K, 2, 1, cvmGet(intrinsic_mat, 2, 1));
-    cvmSet(&calib_K, 2, 2, cvmGet(intrinsic_mat, 2, 2));
+    cv::FileNode intrinsic_mat_node = fs["intrinsic_matrix"];
+    cv::Mat intrinsic_mat;
+    cv::read(intrinsic_mat_node, intrinsic_mat);
+    calib_K.at<double>(0, 0) = intrinsic_mat.at<double>(0, 0);
+    calib_K.at<double>(0, 1) = intrinsic_mat.at<double>(0, 1);
+    calib_K.at<double>(0, 2) = intrinsic_mat.at<double>(0, 2);
+    calib_K.at<double>(1, 0) = intrinsic_mat.at<double>(1, 0);
+    calib_K.at<double>(1, 1) = intrinsic_mat.at<double>(1, 1);
+    calib_K.at<double>(1, 2) = intrinsic_mat.at<double>(1, 2);
+    calib_K.at<double>(2, 0) = intrinsic_mat.at<double>(2, 0);
+    calib_K.at<double>(2, 1) = intrinsic_mat.at<double>(2, 1);
+    calib_K.at<double>(2, 2) = intrinsic_mat.at<double>(2, 2);
 
     // D Distortion
-    CvFileNode* dist_mat_node =
-        cvGetFileNodeByName(fs, root_node, "distortion");
-    CvMat* dist_mat = reinterpret_cast<CvMat*>(cvRead(fs, dist_mat_node));
-    cvmSet(&calib_D, 0, 0, cvmGet(dist_mat, 0, 0));
-    cvmSet(&calib_D, 1, 0, cvmGet(dist_mat, 1, 0));
-    cvmSet(&calib_D, 2, 0, cvmGet(dist_mat, 2, 0));
-    cvmSet(&calib_D, 3, 0, cvmGet(dist_mat, 3, 0));
+    cv::FileNode dist_mat_node = fs["distortion"];
+    cv::Mat dist_mat;
+    cv::read(dist_mat_node, dist_mat);
+    calib_D.at<double>(0, 0) = dist_mat.at<double>(0, 0);
+    calib_D.at<double>(1, 0) = dist_mat.at<double>(1, 0);
+    calib_D.at<double>(2, 0) = dist_mat.at<double>(2, 0);
+    calib_D.at<double>(3, 0) = dist_mat.at<double>(3, 0);
 
     // Resolution
-    CvFileNode* width_node = cvGetFileNodeByName(fs, root_node, "width");
-    CvFileNode* height_node = cvGetFileNodeByName(fs, root_node, "height");
-    calib_x_res = width_node->data.i;
-    calib_y_res = height_node->data.i;
-    cvReleaseFileStorage(&fs);
+    cv::FileNode width_node = fs["width"];
+    cv::FileNode height_node = fs["height"];
+    cv::read(width_node, calib_x_res, 0);
+    cv::read(height_node, calib_y_res, 0);
+    fs.release();
     return true;
   }
-  // reset error status
-  cvSetErrStatus(CV_StsOk);
   return false;
 }
 
@@ -259,29 +257,29 @@ void Camera::SetCameraInfo(const sensor_msgs::CameraInfo& camInfo)
   x_res = calib_x_res;
   y_res = calib_y_res;
 
-  cvmSet(&calib_K, 0, 0, cam_info_.K[0]);
-  cvmSet(&calib_K, 0, 1, cam_info_.K[1]);
-  cvmSet(&calib_K, 0, 2, cam_info_.K[2]);
-  cvmSet(&calib_K, 1, 0, cam_info_.K[3]);
-  cvmSet(&calib_K, 1, 1, cam_info_.K[4]);
-  cvmSet(&calib_K, 1, 2, cam_info_.K[5]);
-  cvmSet(&calib_K, 2, 0, cam_info_.K[6]);
-  cvmSet(&calib_K, 2, 1, cam_info_.K[7]);
-  cvmSet(&calib_K, 2, 2, cam_info_.K[8]);
+  calib_K.at<double>(0, 0) = cam_info_.K[0];
+  calib_K.at<double>(0, 1) = cam_info_.K[1];
+  calib_K.at<double>(0, 2) = cam_info_.K[2];
+  calib_K.at<double>(1, 0) = cam_info_.K[3];
+  calib_K.at<double>(1, 1) = cam_info_.K[4];
+  calib_K.at<double>(1, 2) = cam_info_.K[5];
+  calib_K.at<double>(2, 0) = cam_info_.K[6];
+  calib_K.at<double>(2, 1) = cam_info_.K[7];
+  calib_K.at<double>(2, 2) = cam_info_.K[8];
 
   if (cam_info_.D.size() >= 4)
   {
-    cvmSet(&calib_D, 0, 0, cam_info_.D[0]);
-    cvmSet(&calib_D, 1, 0, cam_info_.D[1]);
-    cvmSet(&calib_D, 2, 0, cam_info_.D[2]);
-    cvmSet(&calib_D, 3, 0, cam_info_.D[3]);
+    calib_D.at<double>(0, 0) = cam_info_.D[0];
+    calib_D.at<double>(1, 0) = cam_info_.D[1];
+    calib_D.at<double>(2, 0) = cam_info_.D[2];
+    calib_D.at<double>(3, 0) = cam_info_.D[3];
   }
   else
   {
-    cvmSet(&calib_D, 0, 0, 0);
-    cvmSet(&calib_D, 1, 0, 0);
-    cvmSet(&calib_D, 2, 0, 0);
-    cvmSet(&calib_D, 3, 0, 0);
+    calib_D.at<double>(0, 0) = 0;
+    calib_D.at<double>(1, 0) = 0;
+    calib_D.at<double>(2, 0) = 0;
+    calib_D.at<double>(3, 0) = 0;
   }
 }
 
@@ -348,30 +346,25 @@ bool Camera::SaveCalibXML(const char* calibfile)
   xml_root->SetAttribute("width", calib_x_res);
   xml_root->SetAttribute("height", calib_y_res);
   xml_root->LinkEndChild(
-      FileFormatUtils::createXMLMatrix("intrinsic_matrix", &calib_K));
+      FileFormatUtils::createXMLMatrix("intrinsic_matrix", calib_K));
   xml_root->LinkEndChild(
-      FileFormatUtils::createXMLMatrix("distortion", &calib_D));
+      FileFormatUtils::createXMLMatrix("distortion", calib_D));
   return document.SaveFile(calibfile);
 }
 
 bool Camera::SaveCalibOpenCV(const char* calibfile)
 {
-  cvSetErrMode(CV_ErrModeSilent);
-  CvFileStorage* fs = cvOpenFileStorage(calibfile, 0, CV_STORAGE_WRITE);
-  cvSetErrMode(CV_ErrModeLeaf);
-  if (fs)
+  cv::FileStorage fs;
+  bool success = fs.open(calibfile, cv::FileStorage::WRITE);
+  if (success)
   {
-    cvWrite(fs, "intrinsic_matrix", &calib_K, cvAttrList(0, 0));
-    cvWrite(fs, "distortion", &calib_D, cvAttrList(0, 0));
-    // cvWriteReal(fs, "fov_x", data.fov_x);
-    // cvWriteReal(fs, "fov_y", data.fov_y);
-    cvWriteInt(fs, "width", calib_x_res);
-    cvWriteInt(fs, "height", calib_y_res);
-    cvReleaseFileStorage(&fs);
+    cv::write(fs, "intrinsic_matrix", calib_K);
+    cv::write(fs, "distortion", calib_D);
+    cv::write(fs, "width", calib_x_res);
+    cv::write(fs, "height", calib_y_res);
+    fs.release();
     return true;
   }
-  // reset error status
-  cvSetErrStatus(CV_StsOk);
   return false;
 }
 
@@ -394,27 +387,27 @@ bool Camera::SaveCalib(const char* calibfile, FILE_FORMAT format)
 
 void Camera::Calibrate(ProjPoints& pp)
 {
-  CvMat* object_points = cvCreateMat((int)pp.object_points.size(), 1, CV_32FC3);
-  CvMat* image_points = cvCreateMat((int)pp.image_points.size(), 1, CV_32FC2);
-  const CvMat point_counts =
-      cvMat((int)pp.point_counts.size(), 1, CV_32SC1, &pp.point_counts[0]);
+  cv::Mat object_points = cv::Mat((int)pp.object_points.size(), 1, CV_32FC3);
+  cv::Mat image_points = cv::Mat((int)pp.image_points.size(), 1, CV_32FC2);
+  const cv::Mat point_counts =
+      cv::Mat((int)pp.point_counts.size(), 1, CV_32SC1, &pp.point_counts[0]);
   for (size_t i = 0; i < pp.object_points.size(); i++)
   {
-    object_points->data.fl[i * 3 + 0] = (float)pp.object_points[i].x;
-    object_points->data.fl[i * 3 + 1] = (float)pp.object_points[i].y;
-    object_points->data.fl[i * 3 + 2] = (float)pp.object_points[i].z;
-    image_points->data.fl[i * 2 + 0] = (float)pp.image_points[i].x;
-    image_points->data.fl[i * 2 + 1] = (float)pp.image_points[i].y;
+    object_points.at<float>(i * 3 + 0) = (float)pp.object_points[i].x;
+    object_points.at<float>(i * 3 + 1) = (float)pp.object_points[i].y;
+    object_points.at<float>(i * 3 + 2) = (float)pp.object_points[i].z;
+    image_points.at<float>(i * 2 + 0) = (float)pp.image_points[i].x;
+    image_points.at<float>(i * 2 + 1) = (float)pp.image_points[i].y;
   }
-  cvCalibrateCamera2(object_points, image_points, &point_counts,
-                     cvSize(pp.width, pp.height), &calib_K, &calib_D, 0, 0,
-                     CV_CALIB_USE_INTRINSIC_GUESS);
+  cv::calibrateCamera(object_points, image_points,
+                      cv::Size(pp.width, pp.height), calib_K, calib_D,
+                      cv::Mat(), cv::Mat(), cv::CALIB_USE_INTRINSIC_GUESS);
 
   calib_x_res = pp.width;
   calib_y_res = pp.height;
 
-  cvReleaseMat(&object_points);
-  cvReleaseMat(&image_points);
+  object_points.release();
+  image_points.release();
 }
 
 void Camera::SetRes(int _x_res, int _y_res)
@@ -543,7 +536,7 @@ void Camera::Undistort(vector<PointDouble>& points)
   */
 }
 
-void Camera::Undistort(CvPoint2D32f& point)
+void Camera::Undistort(cv::Point2f& point)
 {
   /*
     // focal length
@@ -663,7 +656,7 @@ void Camera::Distort(PointDouble& point)
   */
 }
 
-void Camera::Distort(CvPoint2D32f& point)
+void Camera::Distort(cv::Point2f& point)
 {
   /*
     double u0 = cvmGet(&calib_K, 0, 2), v0 = cvmGet(&calib_K, 1, 2); // cx, cy
@@ -691,43 +684,43 @@ void Camera::Distort(CvPoint2D32f& point)
   */
 }
 
-void Camera::CalcExteriorOrientation(vector<CvPoint3D64f>& pw,
-                                     vector<CvPoint2D64f>& pi, Pose* pose)
+void Camera::CalcExteriorOrientation(vector<cv::Point3d>& pw,
+                                     vector<cv::Point2d>& pi, Pose* pose)
 {
   double ext_rodriques[3];
   double ext_translate[3];
-  CvMat ext_rodriques_mat = cvMat(3, 1, CV_64F, ext_rodriques);
-  CvMat ext_translate_mat = cvMat(3, 1, CV_64F, ext_translate);
-  CvMat* object_points = cvCreateMat((int)pw.size(), 1, CV_32FC3);
-  CvMat* image_points = cvCreateMat((int)pi.size(), 1, CV_32FC2);
+  cv::Mat ext_rodriques_mat = cv::Mat(3, 1, CV_64F, ext_rodriques);
+  cv::Mat ext_translate_mat = cv::Mat(3, 1, CV_64F, ext_translate);
+  cv::Mat object_points = cv::Mat((int)pw.size(), 1, CV_32FC3);
+  cv::Mat image_points = cv::Mat((int)pi.size(), 1, CV_32FC2);
   for (size_t i = 0; i < pw.size(); i++)
   {
-    object_points->data.fl[i * 3 + 0] = (float)pw[i].x;
-    object_points->data.fl[i * 3 + 1] = (float)pw[i].y;
-    object_points->data.fl[i * 3 + 2] = (float)pw[i].z;
-    image_points->data.fl[i * 2 + 0] = (float)pi[i].x;
-    image_points->data.fl[i * 2 + 1] = (float)pi[i].y;
+    object_points.at<float>(i * 3 + 0) = (float)pw[i].x;
+    object_points.at<float>(i * 3 + 1) = (float)pw[i].y;
+    object_points.at<float>(i * 3 + 2) = (float)pw[i].z;
+    image_points.at<float>(i * 2 + 0) = (float)pi[i].x;
+    image_points.at<float>(i * 2 + 1) = (float)pi[i].y;
   }
-  // cvFindExtrinsicCameraParams2(object_points, image_points, &calib_K,
-  // &calib_D, &ext_rodriques_mat, &ext_translate_mat);
-  cvFindExtrinsicCameraParams2(object_points, image_points, &calib_K, NULL,
-                               &ext_rodriques_mat, &ext_translate_mat);
-  pose->SetRodriques(&ext_rodriques_mat);
-  pose->SetTranslation(&ext_translate_mat);
-  cvReleaseMat(&object_points);
-  cvReleaseMat(&image_points);
+  cv::calibrateCamera(object_points, image_points, image_points.size(), calib_K,
+                      cv::Mat(), ext_rodriques_mat, ext_translate_mat,
+                      cv::CALIB_USE_EXTRINSIC_GUESS);
+
+  pose->SetRodriques(ext_rodriques_mat);
+  pose->SetTranslation(ext_translate_mat);
+  object_points.release();
+  image_points.release();
 }
 
-void Camera::CalcExteriorOrientation(vector<CvPoint3D64f>& pw,
-                                     vector<PointDouble>& pi, CvMat* rodriques,
-                                     CvMat* tra)
+void Camera::CalcExteriorOrientation(vector<cv::Point3d>& pw,
+                                     vector<PointDouble>& pi,
+                                     cv::Mat& rodriques, cv::Mat& tra)
 {
   // assert(pw.size() == pi.size());
 
   int size = (int)pi.size();
 
-  CvPoint3D64f* world_pts = new CvPoint3D64f[size];
-  CvPoint2D64f* image_pts = new CvPoint2D64f[size];
+  cv::Point3d* world_pts = new cv::Point3d[size];
+  cv::Point2d* image_pts = new cv::Point2d[size];
 
   for (int i = 0; i < size; i++)
   {
@@ -742,29 +735,27 @@ void Camera::CalcExteriorOrientation(vector<CvPoint3D64f>& pw,
   }
 
   double rot[3];  // rotation vector
-  CvMat world_mat, image_mat, rot_vec;
-  cvInitMatHeader(&world_mat, size, 1, CV_64FC3, world_pts);
-  cvInitMatHeader(&image_mat, size, 1, CV_64FC2, image_pts);
-  cvInitMatHeader(&rot_vec, 3, 1, CV_64FC1, rot);
+  cv::Mat world_mat, image_mat, rot_vec;
+  world_mat = cv::Mat(size, 1, CV_64FC3, world_pts);
+  image_mat = cv::Mat(size, 1, CV_64FC2, image_pts);
+  rot_vec = cv::Mat(3, 1, CV_64FC1, rot);
 
-  cvZero(tra);
-  // cvmodFindExtrinsicCameraParams2(&world_mat, &image_mat, &calib_K, &calib_D,
-  // rodriques, tra, error);
-  cvFindExtrinsicCameraParams2(&world_mat, &image_mat, &calib_K, &calib_D,
-                               rodriques, tra);
+  tra.setTo(cv::Mat::zeros(tra.size(), tra.type()));
+  cv::calibrateCamera(world_mat, image_mat, image_mat.size(), calib_K,
+                      cv::Mat(), rodriques, tra, cv::CALIB_USE_EXTRINSIC_GUESS);
 
   delete[] world_pts;
   delete[] image_pts;
 }
 
 void Camera::CalcExteriorOrientation(vector<PointDouble>& pw,
-                                     vector<PointDouble>& pi, CvMat* rodriques,
-                                     CvMat* tra)
+                                     vector<PointDouble>& pi,
+                                     cv::Mat& rodriques, cv::Mat& tra)
 {
   // assert(pw.size() == pi.size());
   int size = (int)pi.size();
 
-  vector<CvPoint3D64f> pw3;
+  vector<cv::Point3d> pw3;
   pw3.resize(size);
   for (int i = 0; i < size; i++)
   {
@@ -781,144 +772,144 @@ void Camera::CalcExteriorOrientation(vector<PointDouble>& pw,
 {
   double ext_rodriques[3];
   double ext_translate[3];
-  CvMat ext_rodriques_mat = cvMat(3, 1, CV_64F, ext_rodriques);
-  CvMat ext_translate_mat = cvMat(3, 1, CV_64F, ext_translate);
-  CalcExteriorOrientation(pw, pi, &ext_rodriques_mat, &ext_translate_mat);
-  pose->SetRodriques(&ext_rodriques_mat);
-  pose->SetTranslation(&ext_translate_mat);
+  cv::Mat ext_rodriques_mat = cv::Mat(3, 1, CV_64F, ext_rodriques);
+  cv::Mat ext_translate_mat = cv::Mat(3, 1, CV_64F, ext_translate);
+  CalcExteriorOrientation(pw, pi, ext_rodriques_mat, ext_translate_mat);
+  pose->SetRodriques(ext_rodriques_mat);
+  pose->SetTranslation(ext_translate_mat);
 }
 
-bool Camera::CalcExteriorOrientation(const CvMat* object_points,
-                                     CvMat* image_points, CvMat* rodriques,
-                                     CvMat* tra)
+bool Camera::CalcExteriorOrientation(const cv::Mat& object_points,
+                                     cv::Mat& image_points, cv::Mat& rodriques,
+                                     cv::Mat& tra)
 {
-  cvFindExtrinsicCameraParams2(object_points, image_points, &calib_K, &calib_D,
-                               rodriques, tra);
+  cv::calibrateCamera(object_points, image_points, image_points.size(), calib_K,
+                      cv::Mat(), rodriques, tra, cv::CALIB_USE_EXTRINSIC_GUESS);
   return true;
 }
 
-bool Camera::CalcExteriorOrientation(const CvMat* object_points,
-                                     CvMat* image_points, Pose* pose)
+bool Camera::CalcExteriorOrientation(const cv::Mat& object_points,
+                                     cv::Mat& image_points, Pose* pose)
 {
   double ext_rodriques[3];
   double ext_translate[3];
-  CvMat ext_rodriques_mat = cvMat(3, 1, CV_64F, ext_rodriques);
-  CvMat ext_translate_mat = cvMat(3, 1, CV_64F, ext_translate);
+  cv::Mat ext_rodriques_mat = cv::Mat(3, 1, CV_64F, ext_rodriques);
+  cv::Mat ext_translate_mat = cv::Mat(3, 1, CV_64F, ext_translate);
   bool ret = CalcExteriorOrientation(object_points, image_points,
-                                     &ext_rodriques_mat, &ext_translate_mat);
-  pose->SetRodriques(&ext_rodriques_mat);
-  pose->SetTranslation(&ext_translate_mat);
+                                     ext_rodriques_mat, ext_translate_mat);
+  pose->SetRodriques(ext_rodriques_mat);
+  pose->SetTranslation(ext_translate_mat);
   return ret;
 }
 
-void Camera::ProjectPoints(vector<CvPoint3D64f>& pw, Pose* pose,
-                           vector<CvPoint2D64f>& pi) const
+void Camera::ProjectPoints(vector<cv::Point3d>& pw, Pose* pose,
+                           vector<cv::Point2d>& pi) const
 {
   double ext_rodriques[3];
   double ext_translate[3];
-  CvMat ext_rodriques_mat = cvMat(3, 1, CV_64F, ext_rodriques);
-  CvMat ext_translate_mat = cvMat(3, 1, CV_64F, ext_translate);
-  pose->GetRodriques(&ext_rodriques_mat);
-  pose->GetTranslation(&ext_translate_mat);
-  CvMat* object_points = cvCreateMat((int)pw.size(), 1, CV_32FC3);
-  CvMat* image_points = cvCreateMat((int)pi.size(), 1, CV_32FC2);
+  cv::Mat ext_rodriques_mat = cv::Mat(3, 1, CV_64F, ext_rodriques);
+  cv::Mat ext_translate_mat = cv::Mat(3, 1, CV_64F, ext_translate);
+  pose->GetRodriques(ext_rodriques_mat);
+  pose->GetTranslation(ext_translate_mat);
+  cv::Mat object_points = cv::Mat((int)pw.size(), 1, CV_32FC3);
+  cv::Mat image_points = cv::Mat((int)pi.size(), 1, CV_32FC2);
   for (size_t i = 0; i < pw.size(); i++)
   {
-    object_points->data.fl[i * 3 + 0] = (float)pw[i].x;
-    object_points->data.fl[i * 3 + 1] = (float)pw[i].y;
-    object_points->data.fl[i * 3 + 2] = (float)pw[i].z;
+    object_points.at<float>(i * 3 + 0) = (float)pw[i].x;
+    object_points.at<float>(i * 3 + 1) = (float)pw[i].y;
+    object_points.at<float>(i * 3 + 2) = (float)pw[i].z;
   }
-  cvProjectPoints2(object_points, &ext_rodriques_mat, &ext_translate_mat,
-                   &calib_K, &calib_D, image_points);
+  cv::projectPoints(object_points, ext_translate_mat, ext_translate_mat,
+                    calib_K, calib_D, image_points);
   for (size_t i = 0; i < pw.size(); i++)
   {
-    pi[i].x = image_points->data.fl[i * 2 + 0];
-    pi[i].y = image_points->data.fl[i * 2 + 1];
+    pi[i].x = image_points.at<float>(i * 2 + 0);
+    pi[i].y = image_points.at<float>(i * 2 + 1);
   }
-  cvReleaseMat(&object_points);
-  cvReleaseMat(&image_points);
+  object_points.release();
+  image_points.release();
 }
 
-void Camera::ProjectPoints(const CvMat* object_points,
-                           const CvMat* rotation_vector,
-                           const CvMat* translation_vector,
-                           CvMat* image_points) const
+void Camera::ProjectPoints(const cv::Mat& object_points,
+                           const cv::Mat& rotation_vector,
+                           const cv::Mat& translation_vector,
+                           cv::Mat& image_points) const
 {
   // Project points
-  cvProjectPoints2(object_points, rotation_vector, translation_vector, &calib_K,
-                   &calib_D, image_points);
+  cv::projectPoints(object_points, rotation_vector, translation_vector, calib_K,
+                    calib_D, image_points);
 }
 
-void Camera::ProjectPoints(const CvMat* object_points, const Pose* pose,
-                           CvMat* image_points) const
+void Camera::ProjectPoints(const cv::Mat& object_points, const Pose* pose,
+                           cv::Mat& image_points) const
 {
   double ext_rodriques[3];
   double ext_translate[3];
-  CvMat ext_rodriques_mat = cvMat(3, 1, CV_64F, ext_rodriques);
-  CvMat ext_translate_mat = cvMat(3, 1, CV_64F, ext_translate);
-  pose->GetRodriques(&ext_rodriques_mat);
-  pose->GetTranslation(&ext_translate_mat);
-  cvProjectPoints2(object_points, &ext_rodriques_mat, &ext_translate_mat,
-                   &calib_K, &calib_D, image_points);
+  cv::Mat ext_rodriques_mat = cv::Mat(3, 1, CV_64F, ext_rodriques);
+  cv::Mat ext_translate_mat = cv::Mat(3, 1, CV_64F, ext_translate);
+  pose->GetRodriques(ext_rodriques_mat);
+  pose->GetTranslation(ext_translate_mat);
+  cv::projectPoints(object_points, ext_rodriques_mat, ext_translate_mat,
+                    calib_K, calib_D, image_points);
 }
 
-void Camera::ProjectPoints(const CvMat* object_points, double gl[16],
-                           CvMat* image_points) const
+void Camera::ProjectPoints(const cv::Mat& object_points, double gl[16],
+                           cv::Mat& image_points) const
 {
   double glm[4][4] = {
     gl[0], gl[4], gl[8],  gl[12], gl[1], gl[5], gl[9],  gl[13],
     gl[2], gl[6], gl[10], gl[14], gl[3], gl[7], gl[11], gl[15],
   };
-  CvMat glm_mat = cvMat(4, 4, CV_64F, glm);
+  cv::Mat glm_mat = cv::Mat(4, 4, CV_64F, glm);
 
   // For some reason we need to mirror both y and z ???
   double cv_mul_data[4][4];
-  CvMat cv_mul = cvMat(4, 4, CV_64F, cv_mul_data);
-  cvSetIdentity(&cv_mul);
-  cvmSet(&cv_mul, 1, 1, -1);
-  cvmSet(&cv_mul, 2, 2, -1);
-  cvMatMul(&cv_mul, &glm_mat, &glm_mat);
+  cv::Mat cv_mul = cv::Mat(4, 4, CV_64F, cv_mul_data);
+  cv_mul.setTo(cv::Mat::eye(cv_mul.size(), cv_mul.type()));
+  cv_mul.at<double>(1, 1) = -1;
+  cv_mul.at<double>(2, 2) = -1;
+  glm_mat = cv_mul * glm_mat;
 
   // Rotation
   Rotation r;
-  r.SetMatrix(&glm_mat);
+  r.SetMatrix(glm_mat);
   double rod[3];
-  CvMat rod_mat = cvMat(3, 1, CV_64F, rod);
-  r.GetRodriques(&rod_mat);
+  cv::Mat rod_mat = cv::Mat(3, 1, CV_64F, rod);
+  r.GetRodriques(rod_mat);
   // Translation
   double tra[3] = { glm[0][3], glm[1][3], glm[2][3] };
-  CvMat tra_mat = cvMat(3, 1, CV_64F, tra);
+  cv::Mat tra_mat = cv::Mat(3, 1, CV_64F, tra);
   // Project points
-  ProjectPoints(object_points, &rod_mat, &tra_mat, image_points);
+  ProjectPoints(object_points, rod_mat, tra_mat, image_points);
 }
 
-void Camera::ProjectPoint(const CvPoint3D64f pw, const Pose* pose,
-                          CvPoint2D64f& pi) const
+void Camera::ProjectPoint(const cv::Point3d pw, const Pose* pose,
+                          cv::Point2d& pi) const
 {
   float object_points_data[3] = { (float)pw.x, (float)pw.y, (float)pw.z };
   float image_points_data[2] = { 0 };
-  CvMat object_points = cvMat(1, 1, CV_32FC3, object_points_data);
-  CvMat image_points = cvMat(1, 1, CV_32FC2, image_points_data);
-  ProjectPoints(&object_points, pose, &image_points);
-  pi.x = image_points.data.fl[0];
-  pi.y = image_points.data.fl[1];
+  cv::Mat object_points = cv::Mat(1, 1, CV_32FC3, object_points_data);
+  cv::Mat image_points = cv::Mat(1, 1, CV_32FC2, image_points_data);
+  ProjectPoints(object_points, pose, image_points);
+  pi.x = image_points.at<float>(0);
+  pi.y = image_points.at<float>(1);
 }
 
-void Camera::ProjectPoint(const CvPoint3D32f pw, const Pose* pose,
-                          CvPoint2D32f& pi) const
+void Camera::ProjectPoint(const cv::Point3f pw, const Pose* pose,
+                          cv::Point2f& pi) const
 {
   float object_points_data[3] = { (float)pw.x, (float)pw.y, (float)pw.z };
   float image_points_data[2] = { 0 };
-  CvMat object_points = cvMat(1, 1, CV_32FC3, object_points_data);
-  CvMat image_points = cvMat(1, 1, CV_32FC2, image_points_data);
-  ProjectPoints(&object_points, pose, &image_points);
-  pi.x = image_points.data.fl[0];
-  pi.y = image_points.data.fl[1];
+  cv::Mat object_points = cv::Mat(1, 1, CV_32FC3, object_points_data);
+  cv::Mat image_points = cv::Mat(1, 1, CV_32FC2, image_points_data);
+  ProjectPoints(object_points, pose, image_points);
+  pi.x = image_points.at<float>(0);
+  pi.y = image_points.at<float>(1);
 }
 
 Homography::Homography()
 {
-  cvInitMatHeader(&H, 3, 3, CV_64F, H_data);
+  H = cv::Mat(3, 3, CV_64F, H_data);
 }
 
 void Homography::Find(const vector<PointDouble>& pw,
@@ -927,8 +918,8 @@ void Homography::Find(const vector<PointDouble>& pw,
   assert(pw.size() == pi.size());
   int size = (int)pi.size();
 
-  CvPoint2D64f* srcp = new CvPoint2D64f[size];
-  CvPoint2D64f* dstp = new CvPoint2D64f[size];
+  cv::Point2d* srcp = new cv::Point2d[size];
+  cv::Point2d* dstp = new cv::Point2d[size];
 
   for (int i = 0; i < size; ++i)
   {
@@ -939,15 +930,11 @@ void Homography::Find(const vector<PointDouble>& pw,
     dstp[i].y = pi[i].y;
   }
 
-  CvMat src_pts, dst_pts;
-  cvInitMatHeader(&dst_pts, 1, size, CV_64FC2, dstp);
-  cvInitMatHeader(&src_pts, 1, size, CV_64FC2, srcp);
+  cv::Mat src_pts, dst_pts;
+  dst_pts = cv::Mat(1, size, CV_64FC2, dstp);
+  src_pts = cv::Mat(1, size, CV_64FC2, srcp);
 
-#ifdef OPENCV11
-  cvFindHomography(&src_pts, &dst_pts, &H, 0, 0, 0);
-#else
-  cvFindHomography(&src_pts, &dst_pts, &H);
-#endif
+  cv::findHomography(src_pts, dst_pts, H);
 
   delete[] srcp;
   delete[] dstp;
@@ -958,7 +945,7 @@ void Homography::ProjectPoints(const vector<PointDouble>& from,
 {
   int size = (int)from.size();
 
-  CvPoint3D64f* srcp = new CvPoint3D64f[size];
+  cv::Point3d* srcp = new cv::Point3d[size];
 
   for (int i = 0; i < size; ++i)
   {
@@ -967,13 +954,13 @@ void Homography::ProjectPoints(const vector<PointDouble>& from,
     srcp[i].z = 1;
   }
 
-  CvPoint3D64f* dstp = new CvPoint3D64f[size];
+  cv::Point3d* dstp = new cv::Point3d[size];
 
-  CvMat src_pts, dst_pts;
-  cvInitMatHeader(&src_pts, 1, size, CV_64FC3, srcp);
-  cvInitMatHeader(&dst_pts, 1, size, CV_64FC3, dstp);
+  cv::Mat src_pts, dst_pts;
+  src_pts = cv::Mat(1, size, CV_64FC3, srcp);
+  dst_pts = cv::Mat(1, size, CV_64FC3, dstp);
 
-  cvTransform(&src_pts, &dst_pts, &H);
+  cv::transform(src_pts, dst_pts, H);
 
   to.clear();
   for (int i = 0; i < size; ++i)

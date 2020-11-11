@@ -57,14 +57,14 @@ struct ALVAR_EXPORT ProjPoints
 
   /** \brief 3D object points corresponding with the detected 2D image points.
    */
-  std::vector<CvPoint3D64f> object_points;
+  std::vector<cv::Point3d> object_points;
   /** \brief Detected 2D object points
    * If point_counts[0] == 10, then the
    * first 10 points are detected in the first frame. If
    * point_counts[1]	== 6, then the next 6 of these points are
    * detected in the next frame... etc.
    */
-  std::vector<CvPoint2D64f> image_points;
+  std::vector<cv::Point2d> image_points;
   /** \brief Vector indicating how many points are detected for each frame */
   std::vector<int> point_counts;
 
@@ -73,7 +73,7 @@ struct ALVAR_EXPORT ProjPoints
 
   /** \brief Add elements to \e object_points , \e  image_points and \e
    * point_counts using Chessboard pattern */
-  bool AddPointsUsingChessboard(IplImage* image, double etalon_square_size,
+  bool AddPointsUsingChessboard(const cv::Mat& image, double etalon_square_size,
                                 int etalon_rows, int etalon_columns,
                                 bool visualize);
 
@@ -81,7 +81,7 @@ struct ALVAR_EXPORT ProjPoints
    * point_counts using detected markers */
   bool AddPointsUsingMarkers(std::vector<PointDouble>& marker_corners,
                              std::vector<PointDouble>& marker_corners_img,
-                             IplImage* image);
+                             cv::Mat& image);
 };
 
 /**
@@ -91,9 +91,9 @@ struct ALVAR_EXPORT ProjPoints
 class ALVAR_EXPORT Camera
 {
 public:
-  CvMat calib_K;
+  cv::Mat calib_K;
   double calib_K_data[3][3];
-  CvMat calib_D;
+  cv::Mat calib_D;
   double calib_D_data[4];
   int calib_x_res;
   int calib_y_res;
@@ -239,10 +239,10 @@ public:
   void Undistort(PointDouble& point);
 
   /** \brief Unapplys the lens distortion for one point on an image plane. */
-  void Undistort(CvPoint2D32f& point);
+  void Undistort(cv::Point2f& point);
 
   /** \brief Applys the lens distortion for one point on an image plane. */
-  void Distort(CvPoint2D32f& point);
+  void Distort(cv::Point2f& point);
 
   /** \brief Applys the lens distortion for points on image plane. */
   void Distort(std::vector<PointDouble>& points);
@@ -251,20 +251,20 @@ public:
   void Distort(PointDouble& point);
 
   /** \brief Calculate exterior orientation */
-  void CalcExteriorOrientation(std::vector<CvPoint3D64f>& pw,
-                               std::vector<CvPoint2D64f>& pi, Pose* pose);
+  void CalcExteriorOrientation(std::vector<cv::Point3d>& pw,
+                               std::vector<cv::Point2d>& pi, Pose* pose);
 
   /** \brief Calculate exterior orientation
    */
-  void CalcExteriorOrientation(std::vector<CvPoint3D64f>& pw,
-                               std::vector<PointDouble>& pi, CvMat* rodriques,
-                               CvMat* tra);
+  void CalcExteriorOrientation(std::vector<cv::Point3d>& pw,
+                               std::vector<PointDouble>& pi, cv::Mat& rodriques,
+                               cv::Mat& tra);
 
   /** \brief Calculate exterior orientation
    */
   void CalcExteriorOrientation(std::vector<PointDouble>& pw,
-                               std::vector<PointDouble>& pi, CvMat* rodriques,
-                               CvMat* tra);
+                               std::vector<PointDouble>& pi, cv::Mat& rodriques,
+                               cv::Mat& tra);
 
   /** \brief Calculate exterior orientation
    */
@@ -273,40 +273,42 @@ public:
 
   /** \brief Update existing pose based on new observations. Use (CV_32FC3 and
    * CV_32FC2) for matrices. */
-  bool CalcExteriorOrientation(const CvMat* object_points, CvMat* image_points,
-                               Pose* pose);
+  bool CalcExteriorOrientation(const cv::Mat& object_points,
+                               cv::Mat& image_points, Pose* pose);
 
   /** \brief Update existing pose (in rodriques&tra) based on new observations.
    * Use (CV_32FC3 and CV_32FC2) for matrices. */
-  bool CalcExteriorOrientation(const CvMat* object_points, CvMat* image_points,
-                               CvMat* rodriques, CvMat* tra);
+  bool CalcExteriorOrientation(const cv::Mat& object_points,
+                               cv::Mat& image_points, cv::Mat& rodriques,
+                               cv::Mat& tra);
 
   /** \brief Project one point */
-  void ProjectPoint(const CvPoint3D64f pw, const Pose* pose,
-                    CvPoint2D64f& pi) const;
+  void ProjectPoint(const cv::Point3d pw, const Pose* pose,
+                    cv::Point2d& pi) const;
 
   /** \brief Project one point */
-  void ProjectPoint(const CvPoint3D32f pw, const Pose* pose,
-                    CvPoint2D32f& pi) const;
+  void ProjectPoint(const cv::Point3f pw, const Pose* pose,
+                    cv::Point2f& pi) const;
 
   /** \brief Project points */
-  void ProjectPoints(std::vector<CvPoint3D64f>& pw, Pose* pose,
-                     std::vector<CvPoint2D64f>& pi) const;
+  void ProjectPoints(std::vector<cv::Point3d>& pw, Pose* pose,
+                     std::vector<cv::Point2d>& pi) const;
 
   /** \brief Project points
    */
-  void ProjectPoints(const CvMat* object_points, const CvMat* rotation_vector,
-                     const CvMat* translation_vector,
-                     CvMat* image_points) const;
+  void ProjectPoints(const cv::Mat& object_points,
+                     const cv::Mat& rotation_vector,
+                     const cv::Mat& translation_vector,
+                     cv::Mat& image_points) const;
 
   /** \brief Project points
    */
-  void ProjectPoints(const CvMat* object_points, double gl[16],
-                     CvMat* image_points) const;
+  void ProjectPoints(const cv::Mat& object_points, double gl[16],
+                     cv::Mat& image_points) const;
 
   /** \brief Project points  */
-  void ProjectPoints(const CvMat* object_points, const Pose* pose,
-                     CvMat* image_points) const;
+  void ProjectPoints(const cv::Mat& object_points, const Pose* pose,
+                     cv::Mat& image_points) const;
 };
 
 /**
@@ -316,7 +318,7 @@ public:
 struct ALVAR_EXPORT Homography
 {
   double H_data[3][3];
-  CvMat H;
+  cv::Mat H;
 
   /** \brief Constructor  */
   Homography();

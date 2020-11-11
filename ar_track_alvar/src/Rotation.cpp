@@ -23,6 +23,7 @@
 
 #include "ar_track_alvar/Alvar.h"
 #include "ar_track_alvar/Rotation.h"
+#include <opencv2/calib3d.hpp>
 
 using namespace std;
 
@@ -32,19 +33,19 @@ using namespace std;
 
 Rotation::Rotation()
 {
-  cvInitMatHeader(&quaternion_mat, 4, 1, CV_64F, quaternion);
+  quaternion_mat = cv::Mat(4, 1, CV_64F, quaternion);
   Reset();
 }
 
 Rotation::Rotation(const Rotation& r)
 {
-  cvInitMatHeader(&quaternion_mat, 4, 1, CV_64F, quaternion);
-  cvCopy(&r.quaternion_mat, &quaternion_mat);
+  quaternion_mat = cv::Mat(4, 1, CV_64F);
+  r.quaternion_mat.copyTo(quaternion_mat);
 }
 
-Rotation::Rotation(CvMat* data, RotationType t)
+Rotation::Rotation(const cv::Mat& data, RotationType t)
 {
-  cvInitMatHeader(&quaternion_mat, 4, 1, CV_64F, quaternion);
+  quaternion_mat = cv::Mat(4, 1, CV_64F, quaternion);
 
   Reset();
 
@@ -68,55 +69,55 @@ Rotation::Rotation(CvMat* data, RotationType t)
 void Rotation::Transpose()
 {
   double tmp[9];
-  CvMat tmp_mat = cvMat(3, 3, CV_64F, tmp);
-  GetMatrix(&tmp_mat);
-  cvTranspose(&tmp_mat, &tmp_mat);
-  SetMatrix(&tmp_mat);
+  cv::Mat tmp_mat = cv::Mat(3, 3, CV_64F, tmp);
+  GetMatrix(tmp_mat);
+  cv::transpose(tmp_mat, tmp_mat);
+  SetMatrix(tmp_mat);
 }
 
-void Rotation::MirrorMat(CvMat* mat, bool x, bool y, bool z)
+void Rotation::MirrorMat(cv::Mat& mat, bool x, bool y, bool z)
 {
-  CvMat* mat_mul = cvCloneMat(mat);
-  cvSetIdentity(mat_mul);
+  cv::Mat mat_mul = mat.clone();
+  cv::setIdentity(mat_mul);
   if (x)
-    cvmSet(mat_mul, 0, 0, -1);
+    mat_mul.at<double>(0, 0) = -1;
   if (y)
-    cvmSet(mat_mul, 1, 1, -1);
+    mat_mul.at<double>(1, 1) = -1;
   if (z)
-    cvmSet(mat_mul, 2, 2, -1);
-  cvMatMul(mat_mul, mat, mat);
-  cvReleaseMat(&mat_mul);
+    mat_mul.at<double>(2, 2) = -1;
+  mat = mat_mul * mat;
+  mat_mul.release();
 }
 
 void Rotation::Mirror(bool x, bool y, bool z)
 {
   double tmp[9];
-  CvMat tmp_mat = cvMat(3, 3, CV_64F, tmp);
-  GetMatrix(&tmp_mat);
-  MirrorMat(&tmp_mat, x, y, z);
-  SetMatrix(&tmp_mat);
+  cv::Mat tmp_mat = cv::Mat(3, 3, CV_64F, tmp);
+  GetMatrix(tmp_mat);
+  MirrorMat(tmp_mat, x, y, z);
+  SetMatrix(tmp_mat);
 }
 
 void Rotation::Reset()
 {
-  cvZero(&quaternion_mat);
-  cvmSet(&quaternion_mat, 0, 0, 1);
+  quaternion_mat.setTo(cv::Scalar::all(0));
+  quaternion_mat.at<double>(0, 0) = 1;
 }
 
 void Rotation::Mat9ToRod(double* mat, double* rod)
 {
-  CvMat mat_m, rod_m;
-  cvInitMatHeader(&mat_m, 3, 3, CV_64F, mat);
-  cvInitMatHeader(&rod_m, 3, 1, CV_64F, rod);
-  cvRodrigues2(&mat_m, &rod_m);
+  cv::Mat mat_m, rod_m;
+  mat_m = cv::Mat(3, 3, CV_64F, mat);
+  rod_m = cv::Mat(3, 1, CV_64F, rod);
+  cv::Rodrigues(mat_m, rod_m);
 }
 
-void Rotation::RodToMat9(double* rod, double* mat)
+void Rotation::RodToMat9(const double* rod, double* mat)
 {
-  CvMat mat_m, rod_m;
-  cvInitMatHeader(&mat_m, 3, 3, CV_64F, mat);
-  cvInitMatHeader(&rod_m, 3, 1, CV_64F, rod);
-  cvRodrigues2(&rod_m, &mat_m, 0);
+  cv::Mat mat_m, rod_m;
+  mat_m = cv::Mat(3, 3, CV_64F, mat);
+  rod_m = cv::Mat(3, 1, CV_64F, const_cast<double*>(rod));
+  cv::Rodrigues(rod_m, mat_m);
 }
 
 void Rotation::QuatInv(const double* q, double* qi)
@@ -299,9 +300,9 @@ void Rotation::EulToQuat(const double* eul, double* quat)
   QuatNorm(quat);
 }
 
-void Rotation::SetQuaternion(CvMat* mat)
+void Rotation::SetQuaternion(const cv::Mat& mat)
 {
-  cvCopy(mat, &quaternion_mat);
+  mat.copyTo(quaternion_mat);
   QuatNorm(quaternion);
 }
 
@@ -314,56 +315,56 @@ void Rotation::SetQuaternion(const double* quat)
   QuatNorm(quaternion);
 }
 
-void Rotation::SetEuler(const CvMat* mat)
+void Rotation::SetEuler(const cv::Mat& mat)
 {
-  EulToQuat(mat->data.db, quaternion);
+  EulToQuat(mat.ptr<double>(0), quaternion);
 }
 
-void Rotation::SetRodriques(const CvMat* mat)
+void Rotation::SetRodriques(const cv::Mat& mat)
 {
   double tmp[9];
-  RodToMat9(mat->data.db, tmp);
+  RodToMat9(mat.ptr<double>(0), tmp);
   Mat9ToQuat(tmp, quaternion);
 }
 
-void Rotation::SetMatrix(const CvMat* mat)
+void Rotation::SetMatrix(const cv::Mat& mat)
 {
   double tmp[9];
   for (int i = 0; i < 3; ++i)
     for (int j = 0; j < 3; ++j)
-      tmp[i * 3 + j] = cvmGet(mat, i, j);
+      tmp[i * 3 + j] = mat.at<double>(i, j);
 
   Mat9ToQuat(tmp, quaternion);
 }
 
-void Rotation::GetMatrix(CvMat* mat) const
+void Rotation::GetMatrix(cv::Mat& mat) const
 {
-  if (mat->width == 3)
+  if (mat.cols == 3)
   {
-    QuatToMat9(quaternion, mat->data.db);
+    QuatToMat9(quaternion, mat.ptr<double>(0));
   }
-  else if (mat->width == 4)
+  else if (mat.cols == 4)
   {
-    cvSetIdentity(mat);
-    QuatToMat16(quaternion, mat->data.db);
+    cv::setIdentity(mat);
+    QuatToMat16(quaternion, mat.ptr<double>(0));
   }
 }
 
-void Rotation::GetRodriques(CvMat* mat) const
+void Rotation::GetRodriques(cv::Mat& mat) const
 {
   double tmp[9];
   QuatToMat9(quaternion, tmp);
-  Mat9ToRod(tmp, mat->data.db);
+  Mat9ToRod(tmp, mat.ptr<double>(0));
 }
 
-void Rotation::GetEuler(CvMat* mat) const
+void Rotation::GetEuler(cv::Mat& mat) const
 {
-  QuatToEul(quaternion, mat->data.db);
+  QuatToEul(quaternion, mat.ptr<double>(0));
 }
 
-void Rotation::GetQuaternion(CvMat* mat) const
+void Rotation::GetQuaternion(cv::Mat& mat) const
 {
-  cvCopy(&quaternion_mat, mat);
+  quaternion_mat.copyTo(mat);
 }
 
 // TODO: This is not needed???

@@ -149,7 +149,8 @@ public:
         measurements[measurement].begin());
     MarkerIteratorImpl<MarkerMeasurement> m_end(
         measurements[measurement].end());
-    return _GetPose(m_begin, m_end, cam, pose, NULL);
+    cv::Mat empty_img;
+    return _GetPose(m_begin, m_end, cam, pose);
   }
 };
 

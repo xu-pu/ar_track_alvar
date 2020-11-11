@@ -90,7 +90,7 @@ void makeMarkerMsgs(int type, int id, Pose& p,
                     visualization_msgs::Marker* rvizMarker,
                     ar_track_alvar_msgs::AlvarMarker* ar_pose_marker);
 
-double GetMultiMarkerPose(IplImage* image, Pose& pose)
+double GetMultiMarkerPose(cv::Mat& image, Pose& pose)
 {
   static bool init = true;
 
@@ -320,15 +320,8 @@ void getCapCallback(const sensor_msgs::ImageConstPtr& image_msg)
 
       // Get the estimated pose of the main markers by using all the markers in
       // each bundle
-
-      // GetMultiMarkersPoses expects an IplImage*, but as of ros groovy,
-      // cv_bridge gives us a cv::Mat. I'm too lazy to change to cv::Mat
-      // throughout right now, so I do this conversion here -jbinney
-      IplImage ipl_image = cv_ptr_->image;
-
-      // Get the estimated pose of the main marker using the whole bundle
       static Pose bundlePose;
-      double error = GetMultiMarkerPose(&ipl_image, bundlePose);
+      double error = GetMultiMarkerPose(cv_ptr_->image, bundlePose);
 
       if (optimize_done)
       {
@@ -484,11 +477,11 @@ int main(int argc, char* argv[])
             << std::endl;
   std::cout << std::endl;
 
-  cvNamedWindow("Command input window", CV_WINDOW_AUTOSIZE);
+  cv::namedWindow("Command input window", cv::WINDOW_AUTOSIZE);
 
-  while (1)
+  while (!ros::isShuttingDown())
   {
-    int key = cvWaitKey(20);
+    int key = cv::waitKey(20);
     if (key >= 0)
       keyProcess(key);
     ros::spinOnce();

@@ -25,7 +25,7 @@
 #define OPTIMIZATION_H
 
 #include "Alvar.h"
-#include <cxcore.h>
+#include <opencv2/core/mat.hpp>
 //#include <float.h>
 
 /**
@@ -45,18 +45,18 @@ class ALVAR_EXPORT Optimization
 {
 private:
   void* estimate_param;
-  CvMat* J;
-  CvMat* JtJ;
-  CvMat* W;
-  CvMat* diag;
-  CvMat* tmp;
-  CvMat* err;
-  CvMat* delta;
-  CvMat* x_plus;
-  CvMat* x_minus;
-  CvMat* x_tmp1;
-  CvMat* x_tmp2;
-  CvMat* tmp_par;
+  cv::Mat J;
+  cv::Mat JtJ;
+  cv::Mat W;
+  cv::Mat diag;
+  cv::Mat tmp;
+  cv::Mat err;
+  cv::Mat delta;
+  cv::Mat x_plus;
+  cv::Mat x_minus;
+  cv::Mat x_tmp1;
+  cv::Mat x_tmp2;
+  cv::Mat tmp_par;
 
   double CalcTukeyWeight(double residual, double c);
   double CalcTukeyWeightSimple(double residual, double c);
@@ -87,7 +87,7 @@ public:
    * \brief Returns the current residual vector.
    * \return Pointer to the residual vector.
    */
-  CvMat* GetErr()
+  cv::Mat& GetErr()
   {
     return err;
   }
@@ -101,7 +101,7 @@ public:
    * measurements in optical tracking. \param param		Additional parameters to
    * the function. E.g. some constant parameters that are not optimized.
    */
-  typedef void (*EstimateCallback)(CvMat* state, CvMat* projection,
+  typedef void (*EstimateCallback)(cv::Mat& state, cv::Mat& projection,
                                    void* param);
 
   /**
@@ -110,7 +110,7 @@ public:
    * \param J		Resulting Jacobian matrix is stored here.
    * \param Estimate	The function to be differentiated.
    */
-  void CalcJacobian(CvMat* x, CvMat* J, EstimateCallback Estimate);
+  void CalcJacobian(cv::Mat& x, cv::Mat& J, EstimateCallback Estimate);
 
   /**
    * \brief Runs the optimization loop with selected parameters.
@@ -128,11 +128,12 @@ public:
    * be submitted to give different weights to different measurements. Currently
    * works only with OptimizeMethod::TUKEY_LM.
    */
-  double Optimize(CvMat* parameters, CvMat* measurements, double stop,
+  double Optimize(cv::Mat& parameters, cv::Mat& measurements, double stop,
                   int max_iter, EstimateCallback Estimate, void* param = 0,
                   OptimizeMethod method = LEVENBERGMARQUARDT,
-                  CvMat* parameters_mask = 0, CvMat* J_mat = 0,
-                  CvMat* weights = 0);
+                  const cv::Mat& parameters_mask = cv::Mat(),
+                  const cv::Mat& J_mat = cv::Mat(),
+                  const cv::Mat& weights = cv::Mat());
 };
 
 }  // namespace alvar

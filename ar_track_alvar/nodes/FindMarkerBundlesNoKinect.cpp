@@ -79,7 +79,7 @@ int marker_resolution = 5;   // default marker resolution
 int marker_margin = 2;       // default marker margin
 int n_bundles = 0;
 
-void GetMultiMarkerPoses(IplImage* image);
+void GetMultiMarkerPoses(cv::Mat& image);
 void getCapCallback(const sensor_msgs::ImageConstPtr& image_msg);
 void makeMarkerMsgs(int type, int id, Pose& p,
                     const sensor_msgs::ImageConstPtr& image_msg,
@@ -89,7 +89,7 @@ void makeMarkerMsgs(int type, int id, Pose& p,
 
 // Updates the bundlePoses of the multi_marker_bundles by detecting markers and
 // using all markers in a bundle to infer the master tag's position
-void GetMultiMarkerPoses(IplImage* image)
+void GetMultiMarkerPoses(cv::Mat& image)
 {
   if (marker_detector.Detect(image, cam, true, false, max_new_marker_error,
                              max_track_error, CVSEQ, true))
@@ -242,12 +242,7 @@ void getCapCallback(const sensor_msgs::ImageConstPtr& image_msg)
 
       // Get the estimated pose of the main markers by using all the markers in
       // each bundle
-
-      // GetMultiMarkersPoses expects an IplImage*, but as of ros groovy,
-      // cv_bridge gives us a cv::Mat. I'm too lazy to change to cv::Mat
-      // throughout right now, so I do this conversion here -jbinney
-      IplImage ipl_image = cv_ptr_->image;
-      GetMultiMarkerPoses(&ipl_image);
+      GetMultiMarkerPoses(cv_ptr_->image);
 
       // Draw the observed markers that are visible and note which bundles have
       // at least 1 marker seen

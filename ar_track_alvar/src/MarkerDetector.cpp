@@ -87,12 +87,11 @@ void MarkerDetectorImpl::SetOptions(bool _detect_pose_grayscale)
   detect_pose_grayscale = _detect_pose_grayscale;
 }
 
-int MarkerDetectorImpl::Detect(IplImage* image, Camera* cam, bool track,
+int MarkerDetectorImpl::Detect(cv::Mat& image, Camera* cam, bool track,
                                bool visualize, double max_new_marker_error,
                                double max_track_error,
                                LabelingMethod labeling_method, bool update_pose)
 {
-  assert(image->origin == 0);  // Currently only top-left origin supported
   double error = -1;
 
   // Swap marker tables
@@ -112,7 +111,7 @@ int MarkerDetectorImpl::Detect(IplImage* image, Camera* cam, bool track,
   labeling->SetCamera(cam);
   labeling->LabelSquares(image, visualize);
   vector<vector<PointDouble> >& blob_corners = labeling->blob_corners;
-  IplImage* gray = labeling->gray;
+  cv::Mat gray = labeling->gray;
 
   int orientation;
 
@@ -188,10 +187,9 @@ int MarkerDetectorImpl::Detect(IplImage* image, Camera* cam, bool track,
   return (int)_markers_size();
 }
 
-int MarkerDetectorImpl::DetectAdditional(IplImage* image, Camera* cam,
+int MarkerDetectorImpl::DetectAdditional(cv::Mat& image, Camera* cam,
                                          bool visualize, double max_track_error)
 {
-  assert(image->origin == 0);  // Currently only top-left origin supported
   if (!labeling)
     return -1;
   double error = -1;

@@ -98,8 +98,8 @@ double MultiMarkerFiltered::_Update(MarkerIterator& begin, MarkerIterator& end,
       double cam_posed[16];
       double mar_posed[16];
 
-      CvMat cam_mat = cvMat(4, 4, CV_64F, cam_posed);
-      CvMat mar_mat = cvMat(4, 4, CV_64F, mar_posed);
+      cv::Mat cam_mat = cvMat(4, 4, CV_64F, cam_posed);
+      cv::Mat mar_mat = cvMat(4, 4, CV_64F, mar_posed);
 
       pose.GetMatrix(&cam_mat);
       marker->pose.GetMatrix(&mar_mat);
