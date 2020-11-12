@@ -250,44 +250,30 @@ public:
   /** \brief Applys the lens distortion for points on image plane. */
   void Distort(PointDouble& point);
 
-  /** \brief Calculate exterior orientation */
-  void CalcExteriorOrientation(std::vector<cv::Point3d>& pw,
-                               std::vector<cv::Point2d>& pi, Pose* pose);
+  /** \brief Calculate exterior orientation
+   */
+  void CalcExteriorOrientation(const std::vector<cv::Point3d>& pw,
+                               const std::vector<PointDouble>& pi,
+                               cv::Mat& rodriques, cv::Mat& tra) const;
 
   /** \brief Calculate exterior orientation
    */
-  void CalcExteriorOrientation(std::vector<cv::Point3d>& pw,
-                               std::vector<PointDouble>& pi, cv::Mat& rodriques,
-                               cv::Mat& tra);
+  void CalcExteriorOrientation(const std::vector<PointDouble>& pw,
+                               const std::vector<PointDouble>& pi,
+                               cv::Mat& rodriques, cv::Mat& tra) const;
 
   /** \brief Calculate exterior orientation
    */
-  void CalcExteriorOrientation(std::vector<PointDouble>& pw,
-                               std::vector<PointDouble>& pi, cv::Mat& rodriques,
-                               cv::Mat& tra);
-
-  /** \brief Calculate exterior orientation
-   */
-  void CalcExteriorOrientation(std::vector<PointDouble>& pw,
-                               std::vector<PointDouble>& pi, Pose* pose);
-
-  /** \brief Update existing pose based on new observations. Use (CV_32FC3 and
-   * CV_32FC2) for matrices. */
-  bool CalcExteriorOrientation(const cv::Mat& object_points,
-                               cv::Mat& image_points, Pose* pose);
-
-  /** \brief Update existing pose (in rodriques&tra) based on new observations.
-   * Use (CV_32FC3 and CV_32FC2) for matrices. */
-  bool CalcExteriorOrientation(const cv::Mat& object_points,
-                               cv::Mat& image_points, cv::Mat& rodriques,
-                               cv::Mat& tra);
+  void CalcExteriorOrientation(const std::vector<PointDouble>& pw,
+                               const std::vector<PointDouble>& pi,
+                               Pose* pose) const;
 
   /** \brief Project one point */
-  void ProjectPoint(const cv::Point3d pw, const Pose* pose,
+  void ProjectPoint(const cv::Point3d& pw, const Pose* pose,
                     cv::Point2d& pi) const;
 
   /** \brief Project one point */
-  void ProjectPoint(const cv::Point3f pw, const Pose* pose,
+  void ProjectPoint(const cv::Point3f& pw, const Pose* pose,
                     cv::Point2f& pi) const;
 
   /** \brief Project points */
@@ -317,7 +303,6 @@ public:
  */
 struct ALVAR_EXPORT Homography
 {
-  double H_data[3][3];
   cv::Mat H;
 
   /** \brief Constructor  */
@@ -329,7 +314,7 @@ struct ALVAR_EXPORT Homography
 
   /** \brief Project points using the Homography */
   void ProjectPoints(const std::vector<PointDouble>& from,
-                     std::vector<PointDouble>& to);
+                     std::vector<PointDouble>& to) const;
 };
 
 }  // namespace alvar

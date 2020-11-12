@@ -33,8 +33,6 @@ using namespace std;
 
 Labeling::Labeling()
 {
-  gray = 0;
-  bw = 0;
   cam = 0;
   thresh_param1 = 31;
   thresh_param2 = 5;
@@ -88,9 +86,9 @@ void LabelingCvSeq::LabelSquares(cv::Mat& image, bool visualize)
 
   // Convert grayscale and threshold
   if (image.channels() == 4)
-    cv::cvtColor(image, gray, cv::COLOR_RGBA2GRAY);
+    cv::cvtColor(image, gray, cv::COLOR_BGRA2GRAY);
   else if (image.channels() == 3)
-    cv::cvtColor(image, gray, cv::COLOR_RGB2GRAY);
+    cv::cvtColor(image, gray, cv::COLOR_BGR2GRAY);
   else if (image.channels() == 1)
     image.copyTo(gray);
   else
@@ -110,9 +108,13 @@ void LabelingCvSeq::LabelSquares(cv::Mat& image, bool visualize)
 
   for (const auto& contour : contours)
   {
+    if (contour.size() < _min_edge)
+    {
+      continue;
+    }
     std::vector<cv::Point> result;
     cv::approxPolyDP(contour, result, cv::arcLength(contour, false) * 0.035,
-                     false);  // TODO: Parameters?
+                     true);  // TODO: Parameters?
     if (result.size() == 4 && CheckBorder(result, image.cols, image.rows) &&
         cv::contourArea(result) > _min_area &&  // TODO check limits
         cv::isContourConvex(result))  // ttehop: Changed to 'contours' instead

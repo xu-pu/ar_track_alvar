@@ -424,9 +424,7 @@ void Marker::UpdatePose(vector<PointDouble>& _marker_corners_img, Camera* cam,
                         int orientation, int frame_no /* =0 */,
                         bool update_pose /* =true */)
 {
-  marker_corners_img.resize(_marker_corners_img.size());
-  copy(_marker_corners_img.begin(), _marker_corners_img.end(),
-       marker_corners_img.begin());
+  marker_corners_img = _marker_corners_img;
 
   // Calculate exterior orientation
   if (orientation > 0)

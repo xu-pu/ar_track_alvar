@@ -364,8 +364,7 @@ double MultiMarker::_GetPose(MarkerIterator& begin, MarkerIterator& end,
     {
       for (size_t j = 0; j < marker->marker_corners.size(); ++j)
       {
-        cv::Point3d Xnew = pointcloud[pointcloud_index(id, (int)j)];
-        world_points.push_back(Xnew);
+        world_points.push_back(pointcloud[pointcloud_index(id, (int)j)]);
         image_points.push_back(marker->marker_corners_img.at(j));
         if (!image.empty())
           cv::circle(image,
@@ -380,9 +379,8 @@ double MultiMarker::_GetPose(MarkerIterator& begin, MarkerIterator& end,
   if (world_points.size() < 4)
     return -1;
 
-  double rod[3], tra[3];
-  cv::Mat rot_mat = cv::Mat(3, 1, CV_64F, rod);
-  cv::Mat tra_mat = cv::Mat(3, 1, CV_64F, tra);
+  cv::Mat rot_mat = cv::Mat(3, 1, CV_64F);
+  cv::Mat tra_mat = cv::Mat(3, 1, CV_64F);
   double error = 0;  // TODO: Now we don't calculate any error value
   cam->CalcExteriorOrientation(world_points, image_points, rot_mat, tra_mat);
   pose.SetRodriques(rot_mat);

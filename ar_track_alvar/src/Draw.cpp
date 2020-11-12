@@ -262,12 +262,10 @@ void DrawTexture(cv::Mat& image, cv::Mat& texture, Camera* cam,
   map_mat = cv::getPerspectiveTransform(src, dst);
   cv::Mat img = image.clone();
   cv::Mat img2 = image.clone();
-  cv::Mat mask = cv::Mat(cv::Size(image.cols, image.rows), CV_8UC1);
-  cv::Mat mask2 = cv::Mat(cv::Size(image.cols, image.rows), CV_8UC1);
-  img.setTo(cv::Mat::zeros(img.size(), img.type()));
-  img2.setTo(cv::Mat::zeros(img2.size(), img2.type()));
-  mask.setTo(cv::Mat::zeros(mask.size(), mask.type()));
-  mask2.setTo(cv::Mat::zeros(mask2.size(), mask2.type()));
+  cv::Mat mask = cv::Mat::zeros(cv::Size(image.cols, image.rows), CV_8UC1);
+  cv::Mat mask2 = cv::Mat::zeros(cv::Size(image.cols, image.rows), CV_8UC1);
+  img.setTo(cv::Scalar::all(0));
+  img2.setTo(cv::Scalar::all(0));
   for (int j = 0; j < texture.rows; j++)
   {  // ttesis: why must we copy the texture first?
     for (int i = 0; i < texture.cols; i++)

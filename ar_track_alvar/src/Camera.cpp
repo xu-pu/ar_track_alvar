@@ -26,6 +26,7 @@
 #include "ar_track_alvar/FileFormatUtils.h"
 #include <memory>
 #include <opencv2/opencv.hpp>
+#include <opencv2/calib3d/calib3d_c.h>
 
 using namespace std;
 
@@ -387,17 +388,17 @@ bool Camera::SaveCalib(const char* calibfile, FILE_FORMAT format)
 
 void Camera::Calibrate(ProjPoints& pp)
 {
-  cv::Mat object_points = cv::Mat((int)pp.object_points.size(), 1, CV_32FC3);
-  cv::Mat image_points = cv::Mat((int)pp.image_points.size(), 1, CV_32FC2);
-  const cv::Mat point_counts =
-      cv::Mat((int)pp.point_counts.size(), 1, CV_32SC1, &pp.point_counts[0]);
-  for (size_t i = 0; i < pp.object_points.size(); i++)
+  std::vector<std::vector<cv::Point3f>> object_points;
+  std::vector<std::vector<cv::Point2f>> image_points;
+  object_points.emplace_back();
+  for (const auto& point : pp.object_points)
   {
-    object_points.at<float>(i * 3 + 0) = (float)pp.object_points[i].x;
-    object_points.at<float>(i * 3 + 1) = (float)pp.object_points[i].y;
-    object_points.at<float>(i * 3 + 2) = (float)pp.object_points[i].z;
-    image_points.at<float>(i * 2 + 0) = (float)pp.image_points[i].x;
-    image_points.at<float>(i * 2 + 1) = (float)pp.image_points[i].y;
+    object_points[0].push_back(point);
+  }
+  image_points.emplace_back();
+  for (const auto& point : pp.image_points)
+  {
+    image_points[0].push_back(point);
   }
   cv::calibrateCamera(object_points, image_points,
                       cv::Size(pp.width, pp.height), calib_K, calib_D,
@@ -405,9 +406,6 @@ void Camera::Calibrate(ProjPoints& pp)
 
   calib_x_res = pp.width;
   calib_y_res = pp.height;
-
-  object_points.release();
-  image_points.release();
 }
 
 void Camera::SetRes(int _x_res, int _y_res)
@@ -684,131 +682,51 @@ void Camera::Distort(cv::Point2f& point)
   */
 }
 
-void Camera::CalcExteriorOrientation(vector<cv::Point3d>& pw,
-                                     vector<cv::Point2d>& pi, Pose* pose)
+void Camera::CalcExteriorOrientation(const vector<cv::Point3d>& pw,
+                                     const vector<PointDouble>& pi,
+                                     cv::Mat& rodriques, cv::Mat& tra) const
 {
-  double ext_rodriques[3];
-  double ext_translate[3];
-  cv::Mat ext_rodriques_mat = cv::Mat(3, 1, CV_64F, ext_rodriques);
-  cv::Mat ext_translate_mat = cv::Mat(3, 1, CV_64F, ext_translate);
-  cv::Mat object_points = cv::Mat((int)pw.size(), 1, CV_32FC3);
-  cv::Mat image_points = cv::Mat((int)pi.size(), 1, CV_32FC2);
-  for (size_t i = 0; i < pw.size(); i++)
+  vector<cv::Point2d> pi2;
+  for (const auto& point : pi)
   {
-    object_points.at<float>(i * 3 + 0) = (float)pw[i].x;
-    object_points.at<float>(i * 3 + 1) = (float)pw[i].y;
-    object_points.at<float>(i * 3 + 2) = (float)pw[i].z;
-    image_points.at<float>(i * 2 + 0) = (float)pi[i].x;
-    image_points.at<float>(i * 2 + 1) = (float)pi[i].y;
-  }
-  cv::calibrateCamera(object_points, image_points, image_points.size(), calib_K,
-                      cv::Mat(), ext_rodriques_mat, ext_translate_mat,
-                      cv::CALIB_USE_EXTRINSIC_GUESS);
-
-  pose->SetRodriques(ext_rodriques_mat);
-  pose->SetTranslation(ext_translate_mat);
-  object_points.release();
-  image_points.release();
-}
-
-void Camera::CalcExteriorOrientation(vector<cv::Point3d>& pw,
-                                     vector<PointDouble>& pi,
-                                     cv::Mat& rodriques, cv::Mat& tra)
-{
-  // assert(pw.size() == pi.size());
-
-  int size = (int)pi.size();
-
-  cv::Point3d* world_pts = new cv::Point3d[size];
-  cv::Point2d* image_pts = new cv::Point2d[size];
-
-  for (int i = 0; i < size; i++)
-  {
-    world_pts[i].x = pw[i].x;
-    world_pts[i].y = pw[i].y;
-    world_pts[i].z = pw[i].z;
-    // flip image points! Why???
-    // image_pts[i].x = x_res - pi[i].x;
-    // image_pts[i].y = y_res - pi[i].y;
-    image_pts[i].x = pi[i].x;
-    image_pts[i].y = pi[i].y;
+    pi2.push_back(point);
   }
 
-  double rot[3];  // rotation vector
-  cv::Mat world_mat, image_mat, rot_vec;
-  world_mat = cv::Mat(size, 1, CV_64FC3, world_pts);
-  image_mat = cv::Mat(size, 1, CV_64FC2, image_pts);
-  rot_vec = cv::Mat(3, 1, CV_64FC1, rot);
-
-  tra.setTo(cv::Mat::zeros(tra.size(), tra.type()));
-  cv::calibrateCamera(world_mat, image_mat, image_mat.size(), calib_K,
-                      cv::Mat(), rodriques, tra, cv::CALIB_USE_EXTRINSIC_GUESS);
-
-  delete[] world_pts;
-  delete[] image_pts;
+  tra.setTo(cv::Scalar::all(0));
+  rodriques.setTo(cv::Scalar::all(0));
+  cv::solvePnP(pw, pi2, calib_K, cv::Mat(), rodriques, tra, false,
+               cv::SOLVEPNP_ITERATIVE);
 }
 
-void Camera::CalcExteriorOrientation(vector<PointDouble>& pw,
-                                     vector<PointDouble>& pi,
-                                     cv::Mat& rodriques, cv::Mat& tra)
+void Camera::CalcExteriorOrientation(const vector<PointDouble>& pw,
+                                     const vector<PointDouble>& pi,
+                                     cv::Mat& rodriques, cv::Mat& tra) const
 {
-  // assert(pw.size() == pi.size());
-  int size = (int)pi.size();
-
   vector<cv::Point3d> pw3;
-  pw3.resize(size);
-  for (int i = 0; i < size; i++)
+  for (const auto& point : pw)
   {
-    pw3[i].x = pw[i].x;
-    pw3[i].y = pw[i].y;
-    pw3[i].z = 0;
+    pw3.emplace_back(cv::Point3d(point.x, point.y, 0));
   }
 
   CalcExteriorOrientation(pw3, pi, rodriques, tra);
 }
 
-void Camera::CalcExteriorOrientation(vector<PointDouble>& pw,
-                                     vector<PointDouble>& pi, Pose* pose)
+void Camera::CalcExteriorOrientation(const vector<PointDouble>& pw,
+                                     const vector<PointDouble>& pi,
+                                     Pose* pose) const
 {
-  double ext_rodriques[3];
-  double ext_translate[3];
-  cv::Mat ext_rodriques_mat = cv::Mat(3, 1, CV_64F, ext_rodriques);
-  cv::Mat ext_translate_mat = cv::Mat(3, 1, CV_64F, ext_translate);
+  cv::Mat ext_rodriques_mat = cv::Mat(3, 1, CV_64F);
+  cv::Mat ext_translate_mat = cv::Mat(3, 1, CV_64F);
   CalcExteriorOrientation(pw, pi, ext_rodriques_mat, ext_translate_mat);
   pose->SetRodriques(ext_rodriques_mat);
   pose->SetTranslation(ext_translate_mat);
 }
 
-bool Camera::CalcExteriorOrientation(const cv::Mat& object_points,
-                                     cv::Mat& image_points, cv::Mat& rodriques,
-                                     cv::Mat& tra)
-{
-  cv::calibrateCamera(object_points, image_points, image_points.size(), calib_K,
-                      cv::Mat(), rodriques, tra, cv::CALIB_USE_EXTRINSIC_GUESS);
-  return true;
-}
-
-bool Camera::CalcExteriorOrientation(const cv::Mat& object_points,
-                                     cv::Mat& image_points, Pose* pose)
-{
-  double ext_rodriques[3];
-  double ext_translate[3];
-  cv::Mat ext_rodriques_mat = cv::Mat(3, 1, CV_64F, ext_rodriques);
-  cv::Mat ext_translate_mat = cv::Mat(3, 1, CV_64F, ext_translate);
-  bool ret = CalcExteriorOrientation(object_points, image_points,
-                                     ext_rodriques_mat, ext_translate_mat);
-  pose->SetRodriques(ext_rodriques_mat);
-  pose->SetTranslation(ext_translate_mat);
-  return ret;
-}
-
 void Camera::ProjectPoints(vector<cv::Point3d>& pw, Pose* pose,
                            vector<cv::Point2d>& pi) const
 {
-  double ext_rodriques[3];
-  double ext_translate[3];
-  cv::Mat ext_rodriques_mat = cv::Mat(3, 1, CV_64F, ext_rodriques);
-  cv::Mat ext_translate_mat = cv::Mat(3, 1, CV_64F, ext_translate);
+  cv::Mat ext_rodriques_mat = cv::Mat(3, 1, CV_64F);
+  cv::Mat ext_translate_mat = cv::Mat(3, 1, CV_64F);
   pose->GetRodriques(ext_rodriques_mat);
   pose->GetTranslation(ext_translate_mat);
   cv::Mat object_points = cv::Mat((int)pw.size(), 1, CV_32FC3);
@@ -843,10 +761,8 @@ void Camera::ProjectPoints(const cv::Mat& object_points,
 void Camera::ProjectPoints(const cv::Mat& object_points, const Pose* pose,
                            cv::Mat& image_points) const
 {
-  double ext_rodriques[3];
-  double ext_translate[3];
-  cv::Mat ext_rodriques_mat = cv::Mat(3, 1, CV_64F, ext_rodriques);
-  cv::Mat ext_translate_mat = cv::Mat(3, 1, CV_64F, ext_translate);
+  cv::Mat ext_rodriques_mat = cv::Mat(3, 1, CV_64F);
+  cv::Mat ext_translate_mat = cv::Mat(3, 1, CV_64F);
   pose->GetRodriques(ext_rodriques_mat);
   pose->GetTranslation(ext_translate_mat);
   cv::projectPoints(object_points, ext_rodriques_mat, ext_translate_mat,
@@ -865,7 +781,7 @@ void Camera::ProjectPoints(const cv::Mat& object_points, double gl[16],
   // For some reason we need to mirror both y and z ???
   double cv_mul_data[4][4];
   cv::Mat cv_mul = cv::Mat(4, 4, CV_64F, cv_mul_data);
-  cv_mul.setTo(cv::Mat::eye(cv_mul.size(), cv_mul.type()));
+  cv::setIdentity(cv_mul);
   cv_mul.at<double>(1, 1) = -1;
   cv_mul.at<double>(2, 2) = -1;
   glm_mat = cv_mul * glm_mat;
@@ -883,7 +799,7 @@ void Camera::ProjectPoints(const cv::Mat& object_points, double gl[16],
   ProjectPoints(object_points, rod_mat, tra_mat, image_points);
 }
 
-void Camera::ProjectPoint(const cv::Point3d pw, const Pose* pose,
+void Camera::ProjectPoint(const cv::Point3d& pw, const Pose* pose,
                           cv::Point2d& pi) const
 {
   float object_points_data[3] = { (float)pw.x, (float)pw.y, (float)pw.z };
@@ -895,7 +811,7 @@ void Camera::ProjectPoint(const cv::Point3d pw, const Pose* pose,
   pi.y = image_points.at<float>(1);
 }
 
-void Camera::ProjectPoint(const cv::Point3f pw, const Pose* pose,
+void Camera::ProjectPoint(const cv::Point3f& pw, const Pose* pose,
                           cv::Point2f& pi) const
 {
   float object_points_data[3] = { (float)pw.x, (float)pw.y, (float)pw.z };
@@ -909,7 +825,7 @@ void Camera::ProjectPoint(const cv::Point3f pw, const Pose* pose,
 
 Homography::Homography()
 {
-  H = cv::Mat(3, 3, CV_64F, H_data);
+  H = cv::Mat(3, 3, CV_64F);
 }
 
 void Homography::Find(const vector<PointDouble>& pw,
@@ -918,8 +834,8 @@ void Homography::Find(const vector<PointDouble>& pw,
   assert(pw.size() == pi.size());
   int size = (int)pi.size();
 
-  cv::Point2d* srcp = new cv::Point2d[size];
-  cv::Point2d* dstp = new cv::Point2d[size];
+  cv::Point2d srcp[size];
+  cv::Point2d dstp[size];
 
   for (int i = 0; i < size; ++i)
   {
@@ -934,18 +850,15 @@ void Homography::Find(const vector<PointDouble>& pw,
   dst_pts = cv::Mat(1, size, CV_64FC2, dstp);
   src_pts = cv::Mat(1, size, CV_64FC2, srcp);
 
-  cv::findHomography(src_pts, dst_pts, H);
-
-  delete[] srcp;
-  delete[] dstp;
+  H = cv::findHomography(src_pts, dst_pts);
 }
 
 void Homography::ProjectPoints(const vector<PointDouble>& from,
-                               vector<PointDouble>& to)
+                               vector<PointDouble>& to) const
 {
   int size = (int)from.size();
 
-  cv::Point3d* srcp = new cv::Point3d[size];
+  cv::Point3d srcp[size];
 
   for (int i = 0; i < size; ++i)
   {
@@ -954,7 +867,7 @@ void Homography::ProjectPoints(const vector<PointDouble>& from,
     srcp[i].z = 1;
   }
 
-  cv::Point3d* dstp = new cv::Point3d[size];
+  cv::Point3d dstp[size];
 
   cv::Mat src_pts, dst_pts;
   src_pts = cv::Mat(1, size, CV_64FC3, srcp);
@@ -971,9 +884,6 @@ void Homography::ProjectPoints(const vector<PointDouble>& from,
 
     to.push_back(pt);
   }
-
-  delete[] srcp;
-  delete[] dstp;
 }
 
 }  // namespace alvar

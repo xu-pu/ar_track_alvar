@@ -161,7 +161,7 @@ void KalmanSensor::update_P(const cv::Mat& P_pred, cv::Mat& P)
 {
   // P = (I - K*H) * P_pred
   P_tmp = K * H;
-  P.setTo(cv::Mat::eye(P.size(), P.type()));
+  cv::setIdentity(P);
   P = P_tmp * -1 + P;
   P = P * P_pred;
 }
