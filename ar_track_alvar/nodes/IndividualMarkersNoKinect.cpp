@@ -115,10 +115,13 @@ void getCapCallback(const sensor_msgs::ImageConstPtr& image_msg)
         double px = p.translation[0] / 100.0;
         double py = p.translation[1] / 100.0;
         double pz = p.translation[2] / 100.0;
-        double qx = p.quaternion[1];
-        double qy = p.quaternion[2];
-        double qz = p.quaternion[3];
-        double qw = p.quaternion[0];
+
+        cv::Mat quat =cv::Mat(4, 1, CV_64F);
+        p.GetQuaternion(quat);
+        double qx = quat.at<double>(1,0); //p.quaternion[1]; #leaving these for the record, this was a bug in the original repo
+        double qy = quat.at<double>(2,0); //p.quaternion[2];
+        double qz = quat.at<double>(3,0); //p.quaternion[3];
+        double qw = quat.at<double>(0,0); //p.quaternion[0];
 
         tf::Quaternion rotation(qx, qy, qz, qw);
         tf::Vector3 origin(px, py, pz);
@@ -215,12 +218,13 @@ void getCapCallback(const sensor_msgs::ImageConstPtr& image_msg)
         ar_pose_marker.id = id;
         arPoseMarkers_.markers.push_back(ar_pose_marker);
       }
+      arPoseMarkers_.header.stamp = image_msg->header.stamp;
+      arPoseMarkers_.header.frame_id = output_frame;
       arMarkerPub_.publish(arPoseMarkers_);
     }
-    catch (cv_bridge::Exception& e)
+    catch (const std::exception& e)
     {
-      ROS_ERROR("Could not convert from '%s' to 'rgb8'.",
-                image_msg->encoding.c_str());
+      ROS_ERROR("Error in ar_track_alvar callback");
     }
   }
 }
