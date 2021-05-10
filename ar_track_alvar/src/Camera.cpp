@@ -850,7 +850,11 @@ void Homography::Find(const vector<PointDouble>& pw,
   dst_pts = cv::Mat(1, size, CV_64FC2, dstp);
   src_pts = cv::Mat(1, size, CV_64FC2, srcp);
 
-  H = cv::findHomography(src_pts, dst_pts);
+  cv::Mat tmp = cv::findHomography(src_pts, dst_pts);
+  if (tmp.elemSize() > 0)
+  {
+    H = tmp;
+  }
 }
 
 void Homography::ProjectPoints(const vector<PointDouble>& from,
