@@ -278,10 +278,7 @@ bool Marker::UpdateContentBasic(vector<PointDouble>& _marker_corners_img,
                                 cv::Mat& gray, Camera* cam,
                                 int frame_no /*= 0*/)
 {
-  vector<PointDouble> marker_corners_img_undist;
-  marker_corners_img_undist.resize(_marker_corners_img.size());
-  copy(_marker_corners_img.begin(), _marker_corners_img.end(),
-       marker_corners_img_undist.begin());
+  vector<PointDouble> marker_corners_img_undist(_marker_corners_img);
 
   // Figure out the marker point position in the image
   Homography H;
