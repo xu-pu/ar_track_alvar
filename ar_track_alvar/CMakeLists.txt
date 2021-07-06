@@ -23,8 +23,6 @@ find_package(Eigen3 REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(TinyXML REQUIRED)
 
-cmake_policy(SET CMP0046 OLD)
-
 # dynamic reconfigure support
 generate_dynamic_reconfigure_options(cfg/Params.cfg)
 
