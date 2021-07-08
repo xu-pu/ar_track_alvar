@@ -877,16 +877,18 @@ void Homography::ProjectPoints(const vector<PointDouble>& from,
   src_pts = cv::Mat(1, size, CV_64FC3, srcp);
   dst_pts = cv::Mat(1, size, CV_64FC3, dstp);
 
-  cv::transform(src_pts, dst_pts, H);
+  if (! H.empty()) {
+    cv::transform(src_pts, dst_pts, H);
 
-  to.clear();
-  for (int i = 0; i < size; ++i)
-  {
-    PointDouble pt;
-    pt.x = dstp[i].x / dstp[i].z;
-    pt.y = dstp[i].y / dstp[i].z;
+    to.clear();
+    for (int i = 0; i < size; ++i)
+    {
+      PointDouble pt;
+      pt.x = dstp[i].x / dstp[i].z;
+      pt.y = dstp[i].y / dstp[i].z;
 
-    to.push_back(pt);
+      to.push_back(pt);
+    }
   }
 }
 
