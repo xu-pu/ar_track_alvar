@@ -302,6 +302,12 @@ void GetMarkerPoses(cv::Mat& image, ARCloud& cloud)
       int id = m->GetId();
       ROS_DEBUG_STREAM("******* ID: " << id);
 
+//      ROS_INFO_STREAM("Maker #" << id << " detected, "
+//                              << m->pose.quaternion[0] << ", "
+//                              << m->pose.quaternion[1] << ", "
+//                              << m->pose.quaternion[2] << ", "
+//                              << m->pose.quaternion[3] );
+
       int resol = m->GetRes();
       int ori = m->ros_orientation;
 
@@ -400,13 +406,17 @@ void getPointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& msg)
         int id = (*(marker_detector.markers))[i].GetId();
         Pose p = (*(marker_detector.markers))[i].pose;
 
-        double px = p.translation[0] / 100.0;
-        double py = p.translation[1] / 100.0;
-        double pz = p.translation[2] / 100.0;
-        double qx = p.quaternion[1];
-        double qy = p.quaternion[2];
-        double qz = p.quaternion[3];
-        double qw = p.quaternion[0];
+        Marker* mak = &((*marker_detector.markers)[i]);
+
+        double px = mak->pose.translation[0] / 100.0;
+        double py = mak->pose.translation[1] / 100.0;
+        double pz = mak->pose.translation[2] / 100.0;
+        double qx = mak->pose.quaternion[1];
+        double qy = mak->pose.quaternion[2];
+        double qz = mak->pose.quaternion[3];
+        double qw = mak->pose.quaternion[0];
+
+        ROS_INFO_STREAM("marker #" << id << ", quat: " << qx << ", " << qy << ", " << qz << ", " << qw );
 
         tf::Quaternion rotation(qx, qy, qz, qw);
         tf::Vector3 origin(px, py, pz);
@@ -414,6 +424,12 @@ void getPointCloudCallback(const sensor_msgs::PointCloud2ConstPtr& msg)
         tf::Vector3 markerOrigin(0, 0, 0);
         tf::Transform m(tf::Quaternion::getIdentity(), markerOrigin);
         tf::Transform markerPose = t * m;  // marker pose in the camera frame
+
+//          ROS_INFO_STREAM("temp msg "
+//                                  << t.getRotation().x() << ", "
+//                                  << t.getRotation().y() << ", "
+//                                  << t.getRotation().z() << ", "
+//                                  << t.getRotation().w() );
 
         // Publish the transform from the camera to the marker
         std::string markerFrame = "ar_marker_";
