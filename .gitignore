@@ -9,3 +9,5 @@
 *~
 src/ar_track_alvar
 *.user
+*.idea
+*cmake-build-debug
